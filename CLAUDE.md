@@ -1,8 +1,9 @@
 # Self-Balancing-Cube
 
-Arduino firmware for a Cubli-style cube that balances on a vertex or an edge using three
+ESP32 firmware for a Cubli-style cube that balances on a vertex or an edge using three
 reaction wheels (Nidec 24H brushless motors) and an MPU6050 IMU. This is a fork of ReM-RC's
-project; the code style and structure are upstream's, so keep diffs small and local.
+project; the `development` branch adds a Wi-Fi dashboard, safety arming and a PlatformIO
+build. Keep diffs small and local, and match the existing heavily-commented style.
 
 ## Cards
 
@@ -13,92 +14,109 @@ Load on demand; each card is self-contained.
 
 ## Layout
 
-Each directory is an independent Arduino sketch. There is no shared code between them —
-pin maps, motor helpers and encoder ISRs are copy-pasted per sketch, so a fix in one usually
-has to be repeated by hand in the others.
+| Path | What it is |
+|------|------------|
+| `esp32_cube_enc/ESP32.h` | Pin map, constants, structs, `extern` globals and all cross-file prototypes |
+| `esp32_cube_enc/esp32_cube_enc.cpp` | Storage for the globals, `setup()`, `loop()` (the control loop) |
+| `esp32_cube_enc/functions.cpp` | IMU read and angle estimate, motor mixing and drive, encoder ISRs, calibration, trace, USB serial commands |
+| `esp32_cube_enc/web_interface.cpp` | Wi-Fi AP, HTTP API, gain table and EEPROM save/load, inlined dashboard page |
+| `motors_test/motors_test.ino` | Standalone Arduino sketch for bring-up; duplicates the pin map and motor helpers |
+| `tools/` | `gzip_dashboard.py` (pre-build step), `test_estimator.py` (math and source checks) |
+| `platformio.ini` | Build config; `src_dir` is `esp32_cube_enc` |
 
-| Sketch | Board | Status | Notes |
-|--------|-------|--------|-------|
-| `esp32_cube_enc/` | ESP32 (classic) | **current** | Encoders, WS2812B LEDs (FastLED), different IMU orientation |
-| `ESP32_cube/` | ESP32 (classic) | legacy | No encoders, 4 calibrated balancing points |
-| `arduino_cube/` | Arduino Nano | legacy | Same algorithm as `ESP32_cube`, tuning over hardware `Serial` |
-| `motors_test/` | ESP32 (classic) | diagnostic | Spins each motor both ways, checks encoders, prints to Serial |
+These are separate translation units, not concatenated `.ino` files: anything called across
+files needs a prototype in `ESP32.h`, and a global must be defined once in
+`esp32_cube_enc.cpp` and declared `extern` in the header.
 
-Within a sketch: the `.h` holds pin defines **and all global state/gains**, the main `.ino`
-holds `setup()`/`loop()`, and `functions.ino` holds everything else (Arduino concatenates
-`.ino` files, so there are no prototypes or includes between them).
+The legacy sketches (`ESP32_cube`, `arduino_cube`) are not on this branch; they are on
+`main`.
 
-Default to `esp32_cube_enc/` unless the user names another sketch.
+## Build, flash, test
 
-## Build and flash
+```
+pio run                          # build
+pio run -t upload                # flash
+pio device monitor               # 115200 baud
+python tools/test_estimator.py   # after touching angle_calc() or the heading loop
+```
 
-No build system, tests or CI — sketches are built from the Arduino IDE. Nothing can be
-verified without hardware; say so rather than claiming a change works.
+- Needs arduino-esp32 **core 3.x** (`ledcAttach(pin, freq, res)`, `ledcWrite(pin, …)`).
+  The platform is pinned to pioarduino `55.03.311` in `platformio.ini`; later releases
+  require PlatformIO Core ≥ 6.2.0.
+- `esp32_cube_enc/dashboard_gz.h` is generated from the `DASHBOARD_HTML` literal by the
+  pre-build script and is git-ignored. Edit the literal, never the header. The Arduino IDE
+  cannot build this firmware.
+- `motors_test` is built from the Arduino IDE with the esp32 board package 3.x.
+- `test_estimator.py` models the arithmetic in Python and greps the source; it does not
+  run firmware. Nothing can be verified without hardware — say so rather than claiming a
+  change works.
 
-- ESP32 sketches use `ledcSetup` / `ledcAttachPin` / `ledcWrite(channel, …)`. Those are
-  arduino-esp32 **core 2.x** APIs and were removed in core 3.x (replaced by
-  `ledcAttach(pin, freq, res)` and `ledcWrite(pin, …)`). Build with a 2.x core, or port the
-  PWM calls.
-- `BluetoothSerial` is Bluetooth Classic: original ESP32 only, not S2/S3/C3.
-- `esp32_cube_enc` additionally needs the FastLED library.
-- Serial monitor is 115200 baud everywhere.
+## How the control loop works
 
-## How the control loop works (`esp32_cube_enc`)
+Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
 
-Runs every `loop_time` (15 ms):
-
-1. `Tuning()` — reads two-byte commands from Bluetooth (`ESP32-Cube`).
-2. `angle_calc()` — reads MPU6050 over I2C, applies accelerometer offsets, fuses gyro and
-   accelerometer with a complementary filter (`Gyro_amount` = 0.996), and sets
-   `vertical_vertex` / `vertical_edge` when the cube is held near a balancing point.
+1. `Tuning()` — two-byte commands from USB serial.
+2. `angle_calc(dt)` — reads the MPU6050, applies accelerometer offsets, fuses gyro and
+   accelerometer (`Gyro_amount` = 0.996), and latches `vertical_vertex` / `vertical_edge`
+   near a balancing point. Balance is dropped beyond 7°.
 3. Encoder counts since the last tick become `motorN_speed`; `threeWay_to_XY()` projects
    them onto the X/Y balance axes.
-4. Vertex mode: `pwm = K1·angle + K2·gyro + K3·wheel_speed + K4·integrated_speed` per axis,
-   plus a yaw term (`zK2`, `zK3`), mixed back to three motors by `XYZ_to_threeWay()`.
-   Edge mode: same law with `eK1..eK4`, driving motor 3 only.
-5. Otherwise motors are zeroed and the brake is applied.
+4. Any pending web command (`web_cmd_pending`) is applied.
+5. If `armed`, calibrated and a pose is latched:
+   - Vertex: `pwm = K1·(angle − trim) + K2·gyro + K3·wheel_speed + K4·integrated_speed`
+     per axis, plus a yaw rate loop (`zK2`, `zK3`) with optional heading hold (`zK1`),
+     mixed to three motors by `XYZ_to_threeWay()`.
+   - Edge: same law with `eK1..eK4`, driving motor 3 only.
+6. Otherwise motors are zeroed and the brake is applied.
+7. `traceRecord()` appends one telemetry sample.
 
-Balance is dropped when the angle exceeds 7°. A 2 s side loop checks battery voltage and
-nags (BT message + blinking LEDs) while uncalibrated.
+`handleWebInterface()` runs at the end of every `loop()` pass, outside the timed block.
+
+## Rules for the web interface
+
+- HTTP handlers never call motor functions. They validate, store a request
+  (`web_cmd_pending`, `yaw_rate_request`, `yaw_turn_request`) and return; the control loop
+  acts on it.
+- Handlers run from `loop()`, so they cannot interrupt a control iteration, but anything
+  slow in a handler stalls balancing. Keep responses small and never block.
+- A pending STOP is never overwritten by another command.
+- Calibration and EEPROM writes are refused while `balancingActive()`.
+- New gains are **appended** to `GAIN_DEFS` and `NUM_GAINS` is bumped; `loadGains()`
+  matches saved values by position. Do not reorder without bumping `GAINS_ID`.
 
 ## Things that are easy to get wrong
 
+- **The cube boots disarmed.** `armed` is `false` at start; nothing balances until ARM
+  from the dashboard or `a+` over serial.
 - **PWM is inverted**: motors are driven with `255 - abs(sp)`, so a duty of 255 is stopped.
+  A floating PWM pin means full drive, which is why `setup()` attaches PWM before anything
+  else. Keep that block first.
 - **`BRAKE` is active-low**: `HIGH` releases the brake (running), `LOW` brakes.
-- **Motor numbering is not pin order**: channels are PWM1→CH1, PWM2→CH0, PWM3→CH2.
-- **Encoder ISRs** modify `enc_countN` (`volatile`); the main loop reads and zeroes them
-  without disabling interrupts. Upstream behaviour — don't "fix" it unasked.
-- **EEPROM layout differs per sketch.** `esp32_cube_enc` stores raw accelerometer offsets
-  for vertex + one edge with magic `ID == 96`. The legacy sketches store angle offsets for
-  vertex + three edges with `ID1..ID4 == 99`. Changing `OffsetsObj` invalidates a
-  calibrated cube; bump the magic if you do.
-- **Axes differ between sketches.** The IMU is mounted differently in `esp32_cube_enc`
-  (X-angle integrates `GyX`) than in the legacy sketches (X-angle integrates `GyZ`). Don't
-  port angle math between them verbatim.
-- **Gyro offsets are measured at boot** (3 × 512 samples, about 8 s). The cube must sit
-  still during startup.
-- **Battery divider is hand-tuned** (`/ 204`, `/ 207`, or `bat_divider`); the buzzer sounds
-  between 8 V and 9.5 V. The constant depends on the builder's resistors.
-- Gains (`K1..K4`, `eK1..eK4`, `zK2`, `zK3`) are tuned to the physical build. Don't change
-  them as a side effect of other work.
+- **`MotorN_control(0)` is not zero drive**: it adds the measured wheel speed before
+  clamping. Deliberately left as is.
+- **Encoder ISRs** modify `enc_countN`; the main loop reads and zeroes them without masking
+  interrupts, and the ISRs are not in IRAM, so counts are lost across a flash write.
+- **EEPROM layout**: calibration offsets at address 0 (`ID == 96`), gains and learned trim
+  at address 32 (`GAINS_ID`). Changing `OffsetsObj` invalidates a calibrated cube.
+- **Gyro scale**: always convert raw rates with `GYRO_LSB_PER_DPS`; never hard-code 131 or
+  65.536 (`test_estimator.py` checks this).
+- **Gyro offsets are measured at boot** (about 8 s). The cube must sit still during startup.
+- **Battery divider is hand-tuned** (`/ 204`); the buzzer sounds between 8 V and 9.5 V.
+- **Default gains** are upstream's and predate the gyro-scale fix. Don't change them as a
+  side effect of other work.
+- **The Wi-Fi password** is a constant in `web_interface.cpp`. Don't commit a real one.
 
-## Serial / Bluetooth commands
+## Commands
 
-Two bytes: a parameter letter followed by `+` or `-`.
+USB serial, two bytes: `a+` / `a-` arm and disarm, `c+` start calibration, `c-` capture the
+current pose.
 
-| Command | `esp32_cube_enc` | `ESP32_cube` | `arduino_cube` |
-|---------|------------------|--------------|----------------|
-| `c+` / `c-` | start calibration / capture point | same | same |
-| `p±` | — | `K1` ± 1 | `pGain` ± 1 |
-| `i±` | — | `K2` ± 0.05 | `iGain` ± 0.05 |
-| `s±` | — | `K3` ± 0.005 | `sGain` ± 0.005 |
-| `b±` | — | — | `bat_divider` ± 1 |
-
-Live gain tuning does not exist in `esp32_cube_enc`; gains there are compile-time only.
-Tuned values are never persisted in any sketch — only calibration offsets are.
+HTTP: `GET /api/state`, `GET /api/trace?since=N`, `GET|POST /api/gains`,
+`POST /api/command` with `cmd=` one of `stop`, `disarm`, `arm`, `cal_start`, `cal_capture`,
+`cal_save`, `gains_save`, `trim_reset`, `yaw` (`rate=`), `turn` (`deg=`), `yaw_free`.
 
 ## Docs
 
-`README.md` is the builder-facing guide (hardware, wiring, calibration, videos). Schematics
-are `schematic.pdf` (ESP32) and `arduino_schematic.pdf` (Nano), with PNG copies in
-`pictures/`. Keep README and this file in sync when commands or calibration steps change.
+`README.md` is the builder-facing guide. The schematic is `schematic.pdf`, with a PNG copy
+in `pictures/`. Keep README and this file in sync when commands, calibration steps or the
+build change.
