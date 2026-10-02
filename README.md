@@ -1,46 +1,169 @@
 # Self-Balancing-Cube
 
-**UPDATE (2024-07-14)**
-
-New code is in **esp32_cube_enc** folder. I changed sensor orientation. So, if you make my cube before, to use this code, you need to reprint one part.
-
-Or you can print redesigned cube https://www.thingiverse.com/thing:6695891
-
-<img src="/pictures/cube2.jpg" alt="Cubli"/>
-
-The red connections you see in the schematic must be connected!
-
-If something doesn't work, try the motors test sketch. It tests all motors, rotation directions and encoders.
-
-Folow this video https://youtu.be/ZU0oTBRDgOE
-
----
+A Cubli-style cube that balances on a vertex or an edge using three reaction wheels.
 
 ESP32, MPU6050, Nidec 24H brushless motors, 500 mAh LiPo battery.
 
+<img src="pictures/cube2.jpg" alt="Cubli"/>
+
+## What's in this repository
+
+| Path | Description |
+|------|-------------|
+| [`esp32_cube_enc/`](esp32_cube_enc) | Balancing firmware for the ESP32. Uses the motor encoders, WS2812B status LEDs and a Wi-Fi dashboard. Built with PlatformIO. |
+| [`motors_test/`](motors_test) | Arduino sketch that checks all motors, rotation directions and encoders. |
+| [`tools/`](tools) | Build helper for the dashboard page and checks for the estimator math. |
+| [`PCBGerber/`](PCBGerber) | Gerber files for a PCB. |
+
+The older firmware without encoders (`ESP32_cube`) and the Arduino Nano port
+(`arduino_cube`) were removed from this branch. They are still available on the `main`
+branch.
+
+> The sensor orientation in `esp32_cube_enc` differs from the original cube. If you built
+> the earlier cube you need to reprint one part to use this code — or print the redesigned
+> cube: https://www.thingiverse.com/thing:6695891
+
+## Hardware
+
+- ESP32 dev board (original ESP32, e.g. ESP-WROOM-32)
+- MPU6050 gyro/accelerometer
+- 3 × Nidec 24H brushless motor with built-in driver and encoder
+
+  <img src="pictures/nidec.jpg" alt="Nidec 24H motor" width="300"/>
+- Battery: 3S1P LiPo (11.1 V), 500 mAh
+- Buzzer: any 5 V active buzzer
+- Voltage regulator: any 5 V regulator (7805)
+- 3 × WS2812B LED
+
+### Schematic
+
+<img src="pictures/schematic.png" alt="Self-Balancing-Cube-Schematic"/>
+
+Full resolution: [`schematic.pdf`](schematic.pdf)
+
+The red connections in the schematic are the encoder lines. They **must be connected**.
+
+## Building and flashing
+
+### Balancing firmware (PlatformIO)
+
+```
+pio run                 # build
+pio run -t upload       # flash
+pio device monitor      # serial monitor, 115200 baud
+```
+
+- The firmware uses the arduino-esp32 **core 3.x** PWM API (`ledcAttach`), provided by the
+  pioarduino platform pinned in `platformio.ini`. The pinned release works with PlatformIO
+  Core 6.1.x; newer platform releases need Core 6.2.0 or later.
+- The dashboard page is gzipped into `esp32_cube_enc/dashboard_gz.h` by a pre-build script.
+  That file is generated and git-ignored, so the Arduino IDE cannot build this firmware
+  as-is.
+- FastLED is fetched automatically.
+
+Before flashing, set your own access-point password in
+`esp32_cube_enc/web_interface.cpp` (`WIFI_PASSWORD`). WPA2 requires at least 8 characters —
+a shorter one means the network never starts.
+
+### Motor test (Arduino IDE)
+
+Open `motors_test/` in the Arduino IDE with the *esp32* board package **3.x** and upload.
+
+## How it works
+
+```mermaid
+flowchart LR
+    IMU[MPU6050] --> F[Complementary filter<br/>tilt angle X/Y]
+    ENC[Motor encoders] --> S[Wheel speed X/Y]
+    F --> C[Balance controller<br/>angle, gyro rate, wheel speed]
+    S --> C
+    C --> M[Mix to 3 motors]
+    M --> W[Reaction wheels]
+    WEB[Wi-Fi dashboard] -. arm / calibrate / tune / yaw .-> C
+```
+
+The control loop runs every 15 ms. When the cube is armed and held close to a calibrated
+balancing point the controller takes over; if it tilts more than 7° the motors stop and
+the brake is applied.
+
+At power-up the firmware measures the gyro offsets for a few seconds — **keep the cube
+still until the beeps finish.**
+
+**The cube boots disarmed**, with the brake engaged. It will not balance until you press
+ARM on the dashboard (or send `a+` over USB serial).
+
 ## Wi-Fi web interface
 
-The cube hosts its own Wi-Fi access point, so no router or internet is
-needed. Connect a phone to the **Cube-Control** network and open
-**http://192.168.4.1**.
+The cube hosts its own Wi-Fi access point, so no router or internet is needed. Connect a
+phone to the **Cube-Control** network and open **http://192.168.4.1** (phones usually offer
+it automatically as a sign-in page; laptops can also use `http://cube.local`).
 
-The dashboard shows live tilt on an attitude target (the outer ring is the
-±7° angle at which balancing disengages), the three motor speeds, battery
-voltage, and status. From it you can:
+The dashboard shows live tilt on an attitude target (the outer ring is the ±7° angle at
+which balancing disengages), the three motor speeds, raw accelerometer values, battery
+voltage, status and a live trace of the control loop. From it you can:
 
 - **SAFE STOP / ARM / DISARM** — stop the motors and keep them stopped
 - **Calibrate** — start, capture each pose, save to EEPROM
-- **Tune gains** — edit K1–K4, zK2, zK3 and eK1–eK4 live, with validation
-  and limits. Changes apply immediately but are only written to EEPROM when
-  you press Save. There is also a Restore Defaults button.
+- **Tune gains** — edit K1–K4, zK2, zK3 and eK1–eK4 live, with validation and limits.
+  Changes apply immediately but are only written to EEPROM when you press Save. There is
+  also a Restore Defaults button.
+- **Yaw** — command a rotation rate about the vertical axis, turn by a number of degrees,
+  or hold the current heading (`zK1`). Heading is gyro dead reckoning, not a compass, so it
+  drifts over minutes.
+- **Auto-trim** — let the cube learn its true balance point from sustained wheel speed
+  (`tK`, off by default). The learned trim is saved with the gains.
 
-Set your own access-point password in `esp32_cube_enc/web_interface.cpp`
-(`WIFI_PASSWORD`). WPA2 requires at least 8 characters — a shorter one
-means the network never starts.
+Bluetooth has been removed: it was 40% of the firmware image, the web interface replaced
+everything it did, and Espressif rates a simultaneous SoftAP + Bluetooth Classic as
+unstable on the ESP32's shared radio.
 
-Bluetooth has been removed: it was 40% of the firmware image, the web
-interface replaced everything it did, and Espressif rates a simultaneous
-SoftAP + Bluetooth Classic as unstable on the ESP32's shared radio.
+### USB serial fallback
+
+If the access point is unavailable, two-character commands work over USB serial at
+115200 baud:
+
+| Send | Effect |
+|------|--------|
+| `a+` / `a-` | arm / disarm |
+| `c+` | start calibration |
+| `c-` | capture the current pose |
+
+## Calibrating the balancing points
+
+The cube will not balance until its balancing points are calibrated. Offsets are stored in
+EEPROM, so this is only needed once. Calibration is refused while the cube is actively
+balancing — disarm first.
+
+Video (shows the same two poses, using the older Bluetooth commands):
+https://youtu.be/ZU0oTBRDgOE
+
+1. Open the **Calibration** section of the dashboard and press **Start**.
+2. Set the cube on its **vertex**. Hold it still at the point where it does not fall to
+   either side and press **Capture pose**.
+3. Set the cube on its **edge**, hold it still and capture again. The second capture
+   writes the offsets to EEPROM automatically.
+
+The dashboard shows the raw accelerometer counts and tells you whether each pose was
+accepted. If a pose is rejected the cube was not close enough to the expected position —
+reposition it and capture again.
+
+## Battery
+
+The buzzer sounds continuously when the battery is low (between 8 V and 9.5 V). The voltage
+divider constant in the code (`analogRead(VBAT) / 204`) must be adjusted by measuring your
+actual battery voltage; compare the dashboard reading with a multimeter.
+
+## Troubleshooting
+
+If something doesn't work, try the `motors_test` sketch. It cycles through every motor —
+rotate, stop, reverse, stop, encoder check — and prints the results to the serial monitor.
+This helps you understand whether the problem is in software or in hardware.
+
+After changing `angle_calc()` or the heading loop, run the estimator checks:
+
+```
+python tools/test_estimator.py
+```
 
 ## Self-righting ("jump up onto an edge") — tried, and why it doesn't work
 
@@ -120,55 +243,20 @@ constant directly), and the cube's edge length.
 
 ### Two firmware notes found along the way
 
-Neither is fixed, because both are baked into the current tuning and
-changing them would alter balancing behaviour:
-
 - **`Motor*_control(0)` does not mean "stop".** It adds the measured wheel
   speed to the command (`sp = sp + motorN_speed`) before clamping, so once
   a wheel exceeds 255 counts/loop, commanding zero produces *full drive*.
-  This is why the jump code drove the motor directly instead.
-- **The gyro scale is inconsistent.** `gyroSens = 0` selects ±250 °/s
-  (131 LSB per °/s), and the rate terms correctly divide by `131.0` — but
-  the angle integration in `angle_calc()` divides by `65.536`, the ±500 °/s
-  constant. The gyro half of the complementary filter therefore contributes
-  twice the rotation it should. The accelerometer half corrects it in steady
-  state, and `K1`/`K2` are tuned around the result, so fixing it would
-  require retuning.
+  This is why the jump code drove the motor directly instead. Not fixed,
+  because it is baked into the current tuning.
+- **The gyro scale was inconsistent, and has since been fixed.** `gyroSens = 0`
+  selects ±250 °/s (131 LSB per °/s), but the angle integration in
+  `angle_calc()` divided by `65.536`, the ±500 °/s constant, and did so in
+  integer math. Both now use `GYRO_LSB_PER_DPS` in float. The default gains
+  were tuned around the old behaviour, so they may need retuning.
 
-<img src="/pictures/cube1.jpg" alt="Self-Balancing-Cube"/>
+## Build videos
 
-<img src="/pictures/schematic.png" alt="Self-Balancing-Cube-Schematic"/>
+- How to build: https://youtu.be/AJQZFHJzwt4
+- Encoder version: https://youtu.be/ZU0oTBRDgOE
 
-About schematic:
-
-Battery: 3S1P LiPo (11.1V). 
-Buzzer: any 5V active buzzer.
-Voltage regulator: any 5V regulator (7805).
-All red connections not nescesary for this project! But if you are designing a PCB I recommend making these connections. Maybe I use encoders in the future, you will be able to use the new firmware without any changes.
- 
-How to build:
-
-https://youtu.be/AJQZFHJzwt4
-
-If something doesn't work, try the motors test sketch. It tests all motors, rotation directions and speeds. This helps you understand the problem is in software or in hardware.
-
-You can also make this balancing cube with Arduino nano controller. All other parts remain the same.
-
-<img src="/pictures/arduino_schematic.png" alt="Self-Balancing-Cube-Schematic"/>
-
-In this version I make offsets setting procedure more simple. Calibrate from
-the web dashboard: open the **Calibration** section, press **Start**, set the
-cube on a vertex and press **Capture pose**, then set it on an edge and
-capture again. The second capture writes the offsets to EEPROM automatically.
-The dashboard shows the raw accelerometer counts and tells you whether each
-pose was accepted.
-
-The same `c+` / `c-` commands still work over **USB serial** as a wired
-fallback, for when the access point is unavailable. Calibration is refused
-while the cube is actively balancing — disarm first.
-
-ESP32 version also has an updated balancing point setting procedure. Important! In this video you can learn how to set the balancing points:
-
-https://youtu.be/Nkm9PoihZOI
-
-
+<img src="pictures/cube1.jpg" alt="Self-Balancing-Cube"/>
