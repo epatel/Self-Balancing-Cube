@@ -30,8 +30,8 @@ Pin map, IMU axis math, pose thresholds (vertex `|AcX| < 2000`; edge `|AcX|` 700
 | Does not build on arduino-esp32 core 3.x | **Reversed**: now uses `ledcAttach`, so it needs core 3.x and no longer builds on 2.x |
 | Gyro integration at 2× scale, plus integer truncation (`GyY * loop_time / 1000` is int math, so rates under ~0.5 °/s integrated to zero) | **Fixed** in the last commit: float math, single `GYRO_LSB_PER_DPS` constant, measured `dt` clamped to 5–45 ms |
 | Motor command not clamped before `255 - abs(sp)` | **Fixed**: clamped to ±255 after the speed feedback is added |
-| No low-voltage cutoff | Not fixed; voltage is now visible on the dashboard |
-| Battery constant `204` questionable | Not fixed; dashboard reading makes it easy to check against a multimeter |
+| No low-voltage cutoff | Not fixed at `fd62361`. Added on the local branch 2026-10-03: warn < 10.5 V, latched disarm < 9.9 V, onboard-LED blink, dashboard pill |
+| Battery constant `204` questionable | Not fixed. On the user's cube a 12.0 V pack reads raw 2700, so the constant should be ~225 there; `204` reads 13.2 V and the 8–9.5 V buzzer band would fire only at a real ~7.3–8.8 V, i.e. 2.4–2.9 V per cell *(inferred from one measurement)* |
 | Encoder counts read and zeroed without masking interrupts | Not fixed |
 | No I2C error handling | Not fixed |
 | LEDs declared `RGB` | Not fixed |

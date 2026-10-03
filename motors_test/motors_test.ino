@@ -3,23 +3,26 @@
 #define BRAKE       26
 #define BUZZER      27
 
-#define DIR1        4
-#define ENC1_1      35
-#define ENC1_2      33
-#define PWM1        32
-#define PWM1_CH     1
+// Motor numbers follow esp32_cube_enc/ESP32.h (remapped for this cube:
+// 1 = D5 group, 2 = D4 group, 3 = D15 group; upstream was 1 = D4, 2 = D15,
+// 3 = D5).
+#define DIR1        5
+#define ENC1_1      16
+#define ENC1_2      17
+#define PWM1        18
+#define PWM1_CH     2
 
-#define DIR2        15
-#define ENC2_1      13
-#define ENC2_2      14
-#define PWM2        25
-#define PWM2_CH     0
+#define DIR2        4
+#define ENC2_1      35
+#define ENC2_2      33
+#define PWM2        32
+#define PWM2_CH     1
 
-#define DIR3        5
-#define ENC3_1      16
-#define ENC3_2      17
-#define PWM3        18
-#define PWM3_CH     2
+#define DIR3        15
+#define ENC3_1      13
+#define ENC3_2      14
+#define PWM3        25
+#define PWM3_CH     0
 
 #define TIMER_BIT  8
 #define BASE_FREQ  20000

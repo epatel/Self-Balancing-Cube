@@ -55,6 +55,7 @@ int32_t motors_speed_Z;
 long currentT, previousT_1, previousT_2;
 
 float batt_voltage = 0;
+BattState batt_state = BATT_NONE;
 
 volatile uint8_t web_cmd_pending = WEB_CMD_NONE;
 
@@ -128,6 +129,10 @@ void setup() {
   FastLED.addLeds<WS2812B, LED_PIN, RGB>(leds, NUM_PIXELS);  // GRB ordering is typical
 
   pinMode(BUZZER, OUTPUT);
+  // The dev board's own LED doubles as the low-battery indicator, so a
+  // warning is visible even on a cube without a buzzer or WS2812s.
+  pinMode(INT_LED, OUTPUT);
+  digitalWrite(INT_LED, LOW);
 
   // Cycle through red, green, and blue to show that the LEDs are working.
   for (int i=0;i<=255;i+=10) {
@@ -244,6 +249,13 @@ void loop() {
         yaw_turn_new = false;
         break;
       case WEB_CMD_ARM:
+        // A battery cutoff holds until the pack is charged or swapped (or
+        // the cube is restarted); the HTTP handler refuses too, but the
+        // serial "a+" path arrives only here.
+        if (batt_state == BATT_CUTOFF) {
+          Serial.println("Refused to arm: battery cutoff. Charge or replace the pack.");
+          break;
+        }
         armed = true;
         // Leave the pose flags cleared: angle_calc() re-detects an upright
         // pose only within its tight angle window, so arming can never make
@@ -406,13 +418,23 @@ void loop() {
     previousT_1 = currentT;
   }
   
-  // Slow status loop: check battery voltage and blink LEDs until calibration
-  // has been completed.
-  if (currentT - previousT_2 >= 2000) {    
-    battVoltage((double)analogRead(VBAT) / 204); // value 204 must be selected by measuring battery voltage!
+  // Battery check: warns, and disarms on a sustained low voltage.
+  static long previousT_batt = 0;
+  if (currentT - previousT_batt >= BATT_CHECK_MS) {
+    battCheck();
+    previousT_batt = currentT;
+  }
+  battIndicate();   // blinks the warning; cheap when nothing changes
+
+  // Slow status loop: blink LEDs until calibration has been completed.  A
+  // battery warning owns the LEDs while it is active.
+  if (currentT - previousT_2 >= 2000) {
     if (!calibrated && !calibrating) {
       Serial.println("Not calibrated yet - use the web dashboard "
                      "(http://192.168.4.1) or send c+ / c- over USB serial.");
+    }
+    if (!calibrated && !calibrating
+        && batt_state != BATT_LOW && batt_state != BATT_CUTOFF) {
       if (!calibrated_leds) {
         leds[0] = CRGB(0, 255, 0);
         leds[1] = CRGB(0, 255, 0);

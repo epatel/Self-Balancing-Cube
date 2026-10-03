@@ -12,6 +12,7 @@ ESP32, MPU6050, Nidec 24H brushless motors, 500 mAh LiPo battery.
 |------|-------------|
 | [`esp32_cube_enc/`](esp32_cube_enc) | Balancing firmware for the ESP32. Uses the motor encoders, WS2812B status LEDs and a Wi-Fi dashboard. Built with PlatformIO. |
 | [`motors_test/`](motors_test) | Arduino sketch that checks all motors, rotation directions and encoders. |
+| [`battery_test/`](battery_test) | Arduino sketch that holds the motors stopped and prints the battery voltage. Type a multimeter reading to get the correct divider constant for the firmware. |
 | [`tools/`](tools) | Build helper for the dashboard page and checks for the estimator math. |
 | [`PCBGerber/`](PCBGerber) | Gerber files for a PCB. |
 
@@ -149,9 +150,20 @@ reposition it and capture again.
 
 ## Battery
 
-The buzzer sounds continuously when the battery is low (between 8 V and 9.5 V). The voltage
-divider constant in the code (`analogRead(VBAT) / 204`) must be adjusted by measuring your
-actual battery voltage; compare the dashboard reading with a multimeter.
+The firmware checks the 3S pack twice a second (smoothed over a couple of seconds):
+
+| Pack voltage | State | What happens |
+|---|---|---|
+| above 10.5 V | OK | nothing |
+| below 10.5 V | LOW | slow blink on the ESP32 board's LED, the WS2812s and the buzzer (if fitted); dashboard shows BATTERY LOW |
+| below 9.9 V for 2 s | CUTOFF | disarms (the cube drops if it was balancing), fast blink; arming is refused until the pack reads 10.8 V or the cube is restarted |
+| below 6 V | no battery | running from USB only; no warning |
+
+The voltage divider constant `BATT_ADC_PER_VOLT` in `esp32_cube_enc/ESP32.h` (225) depends
+on your board's resistors and must be adjusted by measuring your actual battery voltage.
+The `battery_test` sketch does this: run it with the battery connected, type your
+multimeter reading, and it prints the constant to use. (225 was measured on one cube;
+upstream used 204.)
 
 ## Troubleshooting
 

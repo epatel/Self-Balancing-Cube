@@ -443,7 +443,11 @@ function poll(){
    $('m'+(i+1)).textContent=s[i];
    $('b'+(i+1)).style.width=(Math.abs(s[i])/mmax*100)+'%';
   }
-  $('bv').textContent=d.batt_voltage.toFixed(2)+' V';
+  // Battery pill: green ok, amber low, red cutoff, plain on USB power.
+  var bs=d.batt_state,bt=d.batt_voltage.toFixed(2)+' V';
+  pill($('bv'),bs=='cutoff'?'off':(bs=='low'?'live':(bs=='ok'?'on':'')),
+       bs=='cutoff'?'BATTERY CUTOFF '+bt:(bs=='low'?'BATTERY LOW '+bt:
+       (bs=='none'?'NO BATTERY':bt)));
   $('lamp').className=d.armed?'a':'';
   pill($('armed'),d.armed?'live':'off',d.armed?'ARMED':'DISARMED');
   pill($('cal'),d.calibrated?'on':'off',
@@ -786,7 +790,8 @@ void handleApiState() {
   // 640 rather than 512: the raw accelerometer values and cal_result string
   // added when Bluetooth was removed push the worst case past the old size,
   // and snprintf truncates silently - which would emit malformed JSON.
-  char json[704];
+  // 768 since batt_state was added.
+  char json[768];
   int n = snprintf(json, sizeof(json),
     "{"
       "\"robot_angleX\":%.3f,"
@@ -806,6 +811,7 @@ void handleApiState() {
       "\"vertex_calibrated\":%s,"
       "\"armed\":%s,"
       "\"batt_voltage\":%.2f,"
+      "\"batt_state\":\"%s\","      // none | ok | low | cutoff
       // Raw accelerometer counts.  During a first-time calibration the
       // corrected angles above are computed from EEPROM garbage, so these
       // are the only trustworthy numbers - and the pose accept/reject
@@ -833,7 +839,7 @@ void handleApiState() {
     calibrating       ? "true" : "false",
     vertex_calibrated ? "true" : "false",
     armed             ? "true" : "false",
-    batt_voltage,
+    batt_voltage, battStateName(),
     AcX, AcY, AcZ, trimX, trimY, yaw_rate_cmd,
     robot_yaw, yaw_hold ? "true" : "false",
     cal_result);
@@ -1084,6 +1090,15 @@ void handleApiCommand() {
     webServer.send(409, "application/json",
                    "{\"ok\":false,\"error\":\"not while balancing"
                    " - disarm first\"}");
+    return;
+  }
+
+  // A battery cutoff blocks arming until the pack recovers; say why here
+  // rather than let the control loop drop the request silently.
+  if (req == WEB_CMD_ARM && batt_state == BATT_CUTOFF) {
+    webServer.send(409, "application/json",
+                   "{\"ok\":false,\"error\":\"battery cutoff"
+                   " - charge or replace the pack\"}");
     return;
   }
 

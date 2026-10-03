@@ -21,6 +21,7 @@ Load on demand; each card is self-contained.
 | `esp32_cube_enc/functions.cpp` | IMU read and angle estimate, motor mixing and drive, encoder ISRs, calibration, trace, USB serial commands |
 | `esp32_cube_enc/web_interface.cpp` | Wi-Fi AP, HTTP API, gain table and EEPROM save/load, inlined dashboard page |
 | `motors_test/motors_test.ino` | Standalone Arduino sketch for bring-up; duplicates the pin map and motor helpers |
+| `battery_test/battery_test.ino` | Standalone sketch: holds motors stopped, prints battery voltage, derives the firmware's VBAT divider from a typed multimeter reading |
 | `tools/` | `gzip_dashboard.py` (pre-build step), `test_estimator.py` (math and source checks) |
 | `platformio.ini` | Build config; `src_dir` is `esp32_cube_enc` |
 
@@ -101,7 +102,12 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
 - **Gyro scale**: always convert raw rates with `GYRO_LSB_PER_DPS`; never hard-code 131 or
   65.536 (`test_estimator.py` checks this).
 - **Gyro offsets are measured at boot** (about 8 s). The cube must sit still during startup.
-- **Battery divider is hand-tuned** (`/ 204`); the buzzer sounds between 8 V and 9.5 V.
+- **Battery protection** lives in `battCheck()` / `battIndicate()` with thresholds in
+  `ESP32.h` (`BATT_*`): warn below 10.5 V, latched cutoff (disarm) below 9.9 V for 4
+  checks, re-arm only above 10.8 V, "no battery" below 6 V because USB back-feeds the rail
+  to ~4 V. `BATT_ADC_PER_VOLT` (225) is hand-measured per board — use `battery_test`.
+  Upstream had `/ 204` and only a buzzer between 8 and 9.5 V.
+- **`INT_LED` (GPIO2)** is the low-battery indicator; this cube has no buzzer.
 - **Default gains** are upstream's and predate the gyro-scale fix. Don't change them as a
   side effect of other work.
 - **The Wi-Fi password** is a constant in `web_interface.cpp`. Don't commit a real one.

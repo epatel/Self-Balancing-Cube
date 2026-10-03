@@ -69,7 +69,7 @@ Notes on the procedure:
 | 2 | High | Gyro scale mismatch. `gyroSens 0` gives 131 LSB per °/s, but tilt integration divides by 65.536, so the gyro term of the angle estimate runs at 2×. The same line is integer math (`GyY * loop_time / 1000` truncates before the float divide), so rates under about 0.5 °/s integrate to zero. The complementary filter (0.996) pulls it back slowly; gains are tuned around the error. |
 | 3 | Medium | Motor commands are not clamped. `MotorN_control` adds `motorN_speed` and writes `255 - abs(sp)`; the mixer can already exceed 255, so the duty goes negative and is passed as `uint32_t`. Behaviour at saturation is undefined. |
 | 4 | Medium | No low-voltage cutoff. The buzzer sounds only between 8 V and 9.5 V computed; motors keep running. |
-| 5 | Medium | Battery constant `204` does not obviously match the drawn divider (33 kΩ / 10 kΩ on a 12-bit, 3.3 V ADC suggests about 290). If so the warning triggers far too late. Unverified — measure with a multimeter. |
+| 5 | Medium | Battery constant `204` does not obviously match the drawn divider (33 kΩ / 10 kΩ on a 12-bit, 3.3 V ADC suggests about 290). If so the warning triggers far too late. Measured on one cube (2026-10-03): 12.0 V pack gave raw 2700 and 2.317 V at the pin, so the constant there is ~225 and the real ratio 5.18, matching neither 204 nor the drawn divider. `battery_test` derives it per board. |
 | 6 | Low | `enc_countN` is read then zeroed without masking interrupts; counts arriving in between are lost. |
 | 7 | Low | `Tuning()` discards a lone first byte if the second has not arrived yet, so a command split across ticks is dropped. |
 | 8 | Low | No I2C error handling; a disconnected IMU yields garbage that is used as data. |

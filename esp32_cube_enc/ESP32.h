@@ -14,23 +14,29 @@
 
 #define BRAKE       26       // Motor-driver brake/enable input
 
-#define DIR2        15
-#define ENC2_1      13
-#define ENC2_2      14
-#define PWM2        25
-#define PWM2_CH     0
+// Motor numbering follows the control geometry, not the wiring.  Seen from
+// above with the cube on its vertex (MPU6050 Z axis pointing down), motor 3
+// is the wheel on the sensor's X axis and motors 1 and 2 follow it clockwise.
+// On this cube that puts motor 1 on the D5 pin group, motor 2 on D4 and
+// motor 3 on D15; upstream's wiring had 1 = D4, 2 = D15, 3 = D5.  Verified
+// with motors_test (2026-10-03): each group's encoder belongs to its motor.
+#define DIR1        5
+#define ENC1_1      16
+#define ENC1_2      17
+#define PWM1        18
+#define PWM1_CH     2
 
-#define DIR3        5
-#define ENC3_1      16
-#define ENC3_2      17
-#define PWM3        18
-#define PWM3_CH     2
+#define DIR2        4
+#define ENC2_1      35
+#define ENC2_2      33
+#define PWM2        32
+#define PWM2_CH     1
 
-#define DIR1        4
-#define ENC1_1      35
-#define ENC1_2      33
-#define PWM1        32
-#define PWM1_CH     1
+#define DIR3        15
+#define ENC3_1      13
+#define ENC3_2      14
+#define PWM3        25
+#define PWM3_CH     0
 
 #define TIMER_BIT   8        // 8-bit PWM: values range from 0 to 255
 #define BASE_FREQ   20000    // 20 kHz PWM, above the audible motor range
@@ -161,9 +167,27 @@ extern int32_t motors_speed_Z;
 // for slower battery/calibration status messages.
 extern long currentT, previousT_1, previousT_2;
 
-// Battery voltage computed in the slow status loop (see battVoltage()).
-// Stored here so the web interface can report it through /api/state.
+// --- Battery monitoring (see battCheck() in functions.cpp) ---------------
+// analogRead(VBAT) counts per battery volt.  Board-specific: measure the pack
+// and derive it with battery_test/.  225 was measured on this cube (12.0 V
+// pack read raw 2700); upstream's 204 read 13.2 V here.
+#define BATT_ADC_PER_VOLT  225.0f
+// Thresholds for a 3S LiPo, in volts at the pack.
+#define BATT_PRESENT_V      6.0f   // below this there is no pack: on USB power
+                                   // alone the battery rail still reads ~4 V
+#define BATT_WARN_V        10.5f   // 3.5 V/cell: start warning
+#define BATT_WARN_CLEAR_V  10.7f   // hysteresis, so the warning cannot flicker
+#define BATT_CUTOFF_V       9.9f   // 3.3 V/cell: disarm to protect the pack
+#define BATT_CUTOFF_COUNT   4      // consecutive low checks before cutting off,
+                                   // so a dip under load does not end a balance
+#define BATT_REARM_V       10.8f   // after a cutoff, arming is refused until
+                                   // the pack reads this (charged or swapped)
+#define BATT_CHECK_MS     500      // battery check period
+enum BattState { BATT_NONE, BATT_OK, BATT_LOW, BATT_CUTOFF };
+// Smoothed battery voltage and its classification, updated by battCheck().
+// Stored here so the web interface can report them through /api/state.
 extern float batt_voltage;
+extern BattState batt_state;
 
 // --- Web command interface (see web_interface.cpp) ---------------------
 // HTTP handlers never touch the motors.  They only store a request here,
@@ -294,7 +318,9 @@ void angle_setup();
 void angle_calc(float dt);
 void XYZ_to_threeWay(float pwm_X, float pwm_Y, float pwm_Z);
 void threeWay_to_XY(int in_speed1, int in_speed2, int in_speed3);
-void battVoltage(double voltage);
+void battCheck();
+void battIndicate();
+const char* battStateName();
 void pwmSet(uint8_t pin, uint32_t value);
 void Motor1_control(int sp);
 void Motor2_control(int sp);

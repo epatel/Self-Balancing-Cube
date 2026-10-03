@@ -209,14 +209,86 @@ void threeWay_to_XY(int in_speed1, int in_speed2, int in_speed3) {
   speed_Y = -(-0.866 * (in_speed2 - in_speed1)) / 1.1;
 }
 
-void battVoltage(double voltage) {
-  // voltage is the ADC value divided by a board-specific scale factor.  The
-  // buzzer warns while the battery reading is in the configured low range.
-  batt_voltage = voltage;   // keep a copy for the web interface (/api/state)
-  if (voltage > 8 && voltage <= 9.5) {
-    digitalWrite(BUZZER, HIGH);
+void battCheck() {
+  // Read the pack through the VBAT divider and classify it.  Called every
+  // BATT_CHECK_MS from loop(); the thresholds are in ESP32.h.
+  uint32_t sum = 0;
+  for (int i = 0; i < 16; i++) sum += analogRead(VBAT);
+  float v = sum / 16.0f / BATT_ADC_PER_VOLT;
+
+  // Smooth over a couple of seconds, so a current spike while balancing is
+  // not mistaken for a flat pack.  Plugging a pack in (or pulling it) jumps
+  // straight to the new reading instead of ramping through the thresholds.
+  if (v < BATT_PRESENT_V || batt_voltage < BATT_PRESENT_V)
+    batt_voltage = v;
+  else
+    batt_voltage = 0.7f * batt_voltage + 0.3f * v;
+
+  static int low_count = 0;
+  BattState previous = batt_state;
+  if (batt_voltage < BATT_PRESENT_V) {
+    // No pack: the ESP32 is on USB alone.  Nothing to warn about, and a
+    // cutoff is cleared since the pack that caused it has been removed.
+    batt_state = BATT_NONE;
+    low_count = 0;
+  } else if (batt_state == BATT_CUTOFF) {
+    // Latched: only a clearly recovered pack releases it, not the rebound
+    // of a flat one once the motors stop drawing current.
+    if (batt_voltage >= BATT_REARM_V) batt_state = BATT_OK;
+  } else if (batt_voltage < BATT_CUTOFF_V) {
+    batt_state = BATT_LOW;
+    if (++low_count >= BATT_CUTOFF_COUNT) {
+      batt_state = BATT_CUTOFF;
+      // Same effect as DISARM: the control loop takes its "not balancing"
+      // branch on the next pass, which stops the drive and brakes.  The cube
+      // drops if it was balancing - that is the point of a cutoff.
+      armed = false;
+    }
   } else {
-    digitalWrite(BUZZER, LOW);
+    low_count = 0;
+    if (batt_voltage < BATT_WARN_V) batt_state = BATT_LOW;
+    else if (batt_voltage > BATT_WARN_CLEAR_V || batt_state == BATT_NONE)
+      batt_state = BATT_OK;
+    // Between WARN and WARN_CLEAR the previous state stands (hysteresis).
+  }
+
+  if (batt_state != previous) {
+    Serial.print("Battery "); Serial.print(batt_voltage, 2);
+    Serial.print(" V: "); Serial.println(battStateName());
+    if (batt_state == BATT_CUTOFF)
+      Serial.println("Battery cutoff - disarmed. Charge or replace the pack.");
+  }
+}
+
+void battIndicate() {
+  // Low battery: slow blink.  Cutoff: fast blink.  Shown on the dev board's
+  // own LED (INT_LED), the buzzer if one is fitted, and the WS2812s unless
+  // calibration is using them.  Called every loop() pass; it only touches
+  // the outputs when the blink phase changes.
+  static bool shown = false;
+  bool on = false;
+  if (batt_state == BATT_LOW)         on = (millis() / 500) % 2;
+  else if (batt_state == BATT_CUTOFF) on = (millis() / 125) % 2;
+  if (on == shown) return;
+  shown = on;
+  digitalWrite(INT_LED, on ? HIGH : LOW);
+  digitalWrite(BUZZER, on ? HIGH : LOW);
+  if (!calibrating) {
+    CRGB c = on ? CRGB(255, 0, 0) : CRGB::Black;   // the firmware's "red"
+    leds[0] = c;
+    leds[1] = c;
+    leds[2] = c;
+    FastLED.show();
+  }
+}
+
+const char* battStateName() {
+  // Also the value of "batt_state" in /api/state.
+  switch (batt_state) {
+    case BATT_OK:     return "ok";
+    case BATT_LOW:    return "low";
+    case BATT_CUTOFF: return "cutoff";
+    default:          return "none";
   }
 }
 
