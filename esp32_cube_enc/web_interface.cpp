@@ -90,6 +90,9 @@ const GainDef GAIN_DEFS[] = {
   // at, e.g. 11.5.  Values well below a real pack voltage just hit the
   // compensation clamp.
   {"vNom", &vNom, 0.0,  13.0,  0.0  },  // battery compensation
+  // Demo mode, appended likewise: 1 = arm at boot without the dashboard
+  // (takes effect at the next boot, after Save), 0 = boot disarmed.
+  {"autoArm", &autoArm, 0.0, 1.0, 0.0 },  // auto-arm at boot
 };
 // Keep the table and the EEPROM record in step at compile time.
 static_assert(sizeof(GAIN_DEFS) / sizeof(GAIN_DEFS[0]) == NUM_GAINS,
@@ -342,7 +345,11 @@ points="100,170 158,112 100,54 42,112"/></g>
 <div class="st" id="tl" style="margin:8px 0 0"></div>
 <div class="ab">
 <button class="b" id="tpause">Pause</button>
-<button class="b" id="tsave">Download CSV</button></div>
+<button class="b" id="tsave">Download CSV</button>
+<button class="b" id="tcopy">Copy CSV</button></div>
+<textarea id="tcsv" readonly rows="6" style="display:none;width:100%;margin-top:8px;
+ background:var(--bg);color:inherit;border:1px solid var(--ln);border-radius:8px;
+ font:11px ui-monospace,monospace"></textarea>
 <p class="note" id="tn">Live at the full 66.7 Hz control rate — the numeric
 readouts above only sample at 3.3 Hz. Open while tuning: oscillation means
 more damping (K2), slow wander means more angle gain (K1).</p>
@@ -487,9 +494,9 @@ function poll(){
   if(!dragging)$('yv').textContent=d.yaw_rate.toFixed(0)+' °/s';
   // Heading only exists in vertex mode; say so rather than showing a stale
   // number the firmware is not currently updating.
-  $('hv').textContent=d.vertical_vertex
+  $('hv').textContent=(d.vertical_vertex
    ?d.robot_yaw.toFixed(0)+'°'+(d.yaw_hold?' · holding':'')
-   :'—';
+   :'—')+(d.yaw_guard?' · wheels wound up ('+d.wheel_wind+')':'');
   // Don't erase a command result the user has not had time to read.
   if(Date.now()>msgUntil)$('s').textContent='live';
  }).catch(function(){$('s').textContent='no signal';})
@@ -569,14 +576,31 @@ $('tpause').onclick=function(){
  tPause=!tPause;this.textContent=tPause?'Resume':'Pause';
  if(!tPause)drawTrace();
 };
-$('tsave').onclick=function(){
+function traceCSV(){
  // Rebuild CSV from everything accumulated, gaps marked as blank lines.
  var out='seq,t,ax,ay,gx,gy,m1,m2,m3,px,py,gz,yc,pz\n';
  T.forEach(function(s){out+=s?s.join(',')+'\n':'\n';});
+ return out;
+}
+$('tsave').onclick=function(){
+ var url=URL.createObjectURL(new Blob([traceCSV()],{type:'text/csv'}));
  var a=document.createElement('a');
- a.href=URL.createObjectURL(new Blob([out],{type:'text/csv'}));
- a.download='cube-trace.csv';a.click();
- URL.revokeObjectURL(a.href);
+ a.href=url;a.download='cube-trace.csv';
+ document.body.appendChild(a);a.click();a.remove();
+ // Keep the data alive while the browser saves it: Safari aborts the
+ // download if the URL is revoked straight after the click.
+ setTimeout(function(){URL.revokeObjectURL(url);},60000);
+ say(T.length+' samples - if no file appears, use Copy CSV');
+};
+$('tcopy').onclick=function(){
+ // For browsers that cannot download at all, such as the phone's
+ // captive-portal sign-in window: show the CSV in a text box, select it and
+ // copy it.  execCommand because the async clipboard API needs https.
+ var t=$('tcsv');t.value=traceCSV();t.style.display='block';
+ t.focus();t.select();t.setSelectionRange(0,t.value.length);
+ var ok=false;try{ok=document.execCommand('copy');}catch(e){}
+ say(ok?'trace copied - paste it into a note or message'
+       :'select the text below and copy it');
 };
 // --- button feedback --------------------------------------------------
 // A press has to be visibly acknowledged even over a slow AP link, so every
@@ -802,8 +826,8 @@ void handleApiState() {
   // 640 rather than 512: the raw accelerometer values and cal_result string
   // added when Bluetooth was removed push the worst case past the old size,
   // and snprintf truncates silently - which would emit malformed JSON.
-  // 832 since batt_state and batt_comp were added.
-  char json[832];
+  // 896 since batt_state, batt_comp, wheel_wind and yaw_guard were added.
+  char json[896];
   int n = snprintf(json, sizeof(json),
     "{"
       "\"robot_angleX\":%.3f,"
@@ -839,6 +863,8 @@ void handleApiState() {
       // Dead-reckoned heading and whether the outer loop is driving it.
       "\"robot_yaw\":%.1f,"
       "\"yaw_hold\":%s,"
+      "\"wheel_wind\":%.0f,"        // smoothed average wheel speed, counts/tick
+      "\"yaw_guard\":%s,"           // spin blocked until the wheels slow
       "\"cal_result\":\"%s\""
     "}",
     robot_angleX, robot_angleY,
@@ -855,6 +881,7 @@ void handleApiState() {
     batt_voltage, battStateName(), batt_comp,
     AcX, AcY, AcZ, trimX, trimY, yaw_rate_cmd,
     robot_yaw, yaw_hold ? "true" : "false",
+    wheel_wind, yaw_guard ? "true" : "false",
     cal_result);
   // Truncated JSON would be malformed, so refuse to send it rather than let
   // the dashboard silently fail to parse.
@@ -1041,6 +1068,13 @@ void handleApiCommand() {
       webServer.send(400, "application/json", err);
       return;
     }
+    // Wind-up guard: no new spin until the wheels have slowed down.
+    if (yaw_guard && v != 0) {
+      webServer.send(409, "application/json",
+                     "{\"ok\":false,\"error\":\"wheels wound up"
+                     " - wait for them to slow down\"}");
+      return;
+    }
     yaw_rate_request = (float)v;
     // The slider is manual control, so taking it overrides any heading the
     // outer loop was chasing - otherwise the two would fight over
@@ -1072,6 +1106,13 @@ void handleApiCommand() {
                "{\"ok\":false,\"error\":\"deg must be a number between "
                "%.0f and %.0f\"}", -YAW_TURN_MAX, YAW_TURN_MAX);
       webServer.send(400, "application/json", err);
+      return;
+    }
+    // Wind-up guard: a hold (deg=0) is fine, a new turn waits.
+    if (yaw_guard && v != 0) {
+      webServer.send(409, "application/json",
+                     "{\"ok\":false,\"error\":\"wheels wound up"
+                     " - wait for them to slow down\"}");
       return;
     }
     // Order matters: the request must be in place before the loop is told

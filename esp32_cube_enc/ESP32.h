@@ -94,8 +94,8 @@
 
 // Tuning gains are saved after the offsets struct.
 #define GAINS_EEPROM_ADDR 32
-#define NUM_GAINS         13   // 10 balancing gains, auto-trim rate, heading hold,
-                               // battery-compensation nominal voltage
+#define NUM_GAINS         14   // 10 balancing gains, auto-trim rate, heading hold,
+                               // battery-compensation nominal voltage, auto-arm
 // Marks a valid saved gain set.  Bump it only if the ORDER of GAIN_DEFS
 // changes or the fixed fields below move - not merely because a gain was
 // added or removed.  The record carries its own count and keeps the
@@ -233,6 +233,11 @@ extern BattState batt_state;
 extern float vNom;
 extern float batt_comp;      // factor currently applied, for the dashboard
 
+// Demo mode: 1 = arm at the end of boot, so the cube balances when stood up
+// without connecting to the dashboard.  0 = boot disarmed (default).  Stored
+// as a gain so it is switched and saved from the dashboard.
+extern float autoArm;
+
 // --- Web command interface (see web_interface.cpp) ---------------------
 // HTTP handlers never touch the motors.  They only store a request here,
 // and the main control loop acts on it at the start of a control cycle.
@@ -260,6 +265,20 @@ extern float batt_comp;      // factor currently applied, for the dashboard
 // headroom the balancing axes leave on the busiest motor (XYZ_to_threeWay),
 // so spinning can never take drive away from staying upright.
 #define YAW_PWM_MAX   60.0f
+// Wheel wind-up guard.  Friction at the contact corner keeps slowing a spin,
+// so holding one makes the wheels speed up continuously (30 -> 100 counts per
+// tick over 70 s at 20°/s, trace 2026-10-03); near their top speed (~250)
+// they leave balancing no authority, and stopping a spin with them wound up
+// is what preceded the fall in that trace.  wheel_wind is the smoothed
+// average of the three signed wheel speeds (balancing alone kept it under 3
+// in that trace).  Above the limit any spin or turn is ramped to a stop and
+// new ones are refused until the wheels are back under the resume level.
+// Replayed against the trace, 70 would have stopped the 20°/s spin after
+// ~27 s with the wheels at 70 instead of 95.
+#define YAW_WHEEL_LIMIT    70.0f   // counts per control tick
+#define YAW_WHEEL_RESUME   30.0f
+extern float wheel_wind;
+extern bool yaw_guard;
 extern volatile float yaw_rate_request;
 extern float yaw_rate_cmd;     // ramped command actually used by the loop
 

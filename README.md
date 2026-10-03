@@ -102,8 +102,17 @@ the brake is applied.
 At power-up the firmware measures the gyro offsets for a few seconds — **keep the cube
 still until the beeps finish.**
 
+The ESP32 board's LED stays on while the gyro is measured and blinks three times when it
+is done; then the cube can be picked up.
+
 **The cube boots disarmed**, with the brake engaged. It will not balance until you press
 ARM on the dashboard (or send `a+` over USB serial).
+
+**Demo mode:** set the gain `autoArm` to `1` in the gains panel and press **Save**. From the
+next boot the cube arms itself once the gyro check is done, so it balances as soon as it is
+stood on its vertex or edge, with no phone needed. It is otherwise as safe as a manual ARM:
+nothing spins until the cube is within 0.4° of a calibrated pose, and a fall, the battery
+cutoff or DISARM still stop it. Set `autoArm` back to `0` and Save to turn it off.
 
 ## Wi-Fi web interface
 
@@ -118,14 +127,18 @@ voltage, status and a live trace of the control loop. From it you can:
 - **SAFE STOP / ARM / DISARM** — stop the motors and keep them stopped
 - **Calibrate** — start, capture each pose, save to EEPROM
 - **Tune gains** — edit K1–K4, zK2, zK3, eK1–eK4, the auto-trim rate `tK`, heading hold
-  `zK1` and battery compensation `vNom` live, with validation and limits.
+  `zK1`, battery compensation `vNom` and demo mode `autoArm` live, with validation and
+  limits.
   Changes apply immediately but are only written to EEPROM when you press Save. There is
   also a Restore Defaults button.
 - **Yaw** — command a rotation rate about the vertical axis, turn by a number of degrees,
   or hold the current heading (`zK1`). Heading is gyro dead reckoning, not a compass, so it
   drifts over minutes. Rates are limited to ±45 °/s (turns to 25 °/s), commands ramp at
   30 °/s², and the spin only gets the motor range balancing leaves free (at most 60 of
-  255), so a spin command cannot knock the cube over.
+  255), so a spin command cannot knock the cube over. Holding a spin makes the wheels speed
+  up continuously (friction at the corner keeps slowing the cube), so when their average
+  speed passes 70 counts per tick the spin is ramped to a stop and the dashboard shows
+  "wheels wound up" until they slow down again.
 - **Auto-trim** — let the cube learn its true balance point from sustained wheel speed
   (`tK`, off by default). The learned trim is saved with the gains.
 

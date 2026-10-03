@@ -57,6 +57,7 @@ long currentT, previousT_1, previousT_2;
 float batt_voltage = 0;
 BattState batt_state = BATT_NONE;
 float vNom = 0;                // battery compensation off until enabled
+float autoArm = 0;             // demo mode: arm at boot when 1
 float batt_comp = 1.0f;
 
 volatile uint8_t web_cmd_pending = WEB_CMD_NONE;
@@ -77,6 +78,8 @@ int16_t motor3_speed;
 volatile float yaw_rate_request = 0;
 float yaw_rate_cmd = 0;
 float trimX = 0, trimY = 0;
+float wheel_wind = 0;          // wind-up guard (see ESP32.h)
+bool yaw_guard = false;
 
 // Heading hold / scripted turns (see ESP32.h).
 float robot_yaw = 0;
@@ -200,6 +203,16 @@ void setup() {
   // Configure the MPU6050 and measure the gyro's stationary bias.
   angle_setup();
 
+  // Demo mode: arm at boot so no phone is needed (autoArm gain, saved with
+  // the gains).  Still safe in the same ways as a manual ARM: nothing spins
+  // until the cube is stood within 0.4° of a calibrated pose, a fall or the
+  // battery cutoff disarms, and the dashboard can still disarm.  Done before
+  // the access point starts, so an AP failure still disarms as it always did.
+  if (autoArm >= 0.5f && calibrated) {
+    armed = true;
+    Serial.println("Auto-arm: armed at boot (set autoArm to 0 to disable).");
+  }
+
   // Start the Wi-Fi access point and web server (see web_interface.cpp).
   // Done last so it cannot disturb the gyro-bias measurement above.
   startWebInterface();
@@ -233,6 +246,21 @@ void loop() {
     // Convert the three motor speeds into the cube's X/Y motion components.
     threeWay_to_XY(motor1_speed, motor2_speed, motor3_speed);
     motors_speed_Z = motor1_speed + motor2_speed + motor3_speed;
+
+    // Wheel wind-up guard (see YAW_WHEEL_LIMIT in ESP32.h).  A spin winds all
+    // three wheels up together while balancing moves them in opposite
+    // directions, so the average of the signed speeds isolates the wind-up.
+    // Smoothed over ~0.3 s so a single fast tick does not trip it.
+    wheel_wind += 0.05f * (abs(motors_speed_Z) / 3.0f - wheel_wind);
+    if (!yaw_guard && wheel_wind > YAW_WHEEL_LIMIT) {
+      yaw_guard = true;
+      yaw_rate_request = 0;          // slider spin ramps down to zero
+      yaw_turn_new = false;
+      if (yaw_hold) yaw_target = robot_yaw;   // a turn stops where it is
+      Serial.println("Wheels wound up: spin stopped until they slow down.");
+    } else if (yaw_guard && wheel_wind < YAW_WHEEL_RESUME) {
+      yaw_guard = false;
+    }
     
     // Act on any command left by the web interface.  This runs after
     // angle_calc() (which can set the pose flags) and before the balancing

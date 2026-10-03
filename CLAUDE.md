@@ -88,7 +88,11 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
 ## Things that are easy to get wrong
 
 - **The cube boots disarmed.** `armed` is `false` at start; nothing balances until ARM
-  from the dashboard or `a+` over serial.
+  from the dashboard or `a+` over serial — unless the saved gain `autoArm` is 1 (demo
+  mode), which arms at the end of `setup()`, before the AP starts so an AP failure still
+  disarms.
+- **Board LED (GPIO2)**: on during the boot gyro measurement, three quick blinks when done;
+  afterwards it is the low-battery indicator.
 - **PWM is inverted**: motors are driven with `255 - abs(sp)`, so a duty of 255 is stopped.
   A floating PWM pin means full drive, which is why `setup()` attaches PWM before anything
   else. Keep that block first.
@@ -112,7 +116,14 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
   `XYZ_to_threeWay()` limits it to the headroom left after the tilt axes and speed
   feedback, capped at `YAW_PWM_MAX`. Rate commands are ramped (`YAW_ACCEL`) toward
   `rate_target`; keep both, or a slider step or a turn saturates all three motors. The
-  zK3 wheel-sum term still opposes a sustained spin (steady-state lag), not yet fixed.
+  zK3 wheel-sum term still opposes a sustained spin: lag ≈ zK3·(wheel sum)/zK2, about
+  10 °/s at a 20 °/s command after a minute (trace 2026-10-03).
+- **Spinning winds the wheels up** (contact friction), so `yaw_guard` stops spins when the
+  smoothed average signed wheel speed `wheel_wind` passes `YAW_WHEEL_LIMIT` (70). Use the
+  average, not the fastest wheel: balancing alone moves single wheels past 80.
+- **The tilt integration has spin cross-terms** (`spin_dps · tilt` in `angle_calc()`),
+  using tilt from gravity = estimate + the captured pose's own tilt. Without them a spin
+  shifts the estimate ~2° (seen in the trace, reproduced in simulation).
 - **Gyro scale**: always convert raw rates with `GYRO_LSB_PER_DPS`; never hard-code 131 or
   65.536 (`test_estimator.py` checks this).
 - **Gyro offsets are measured at boot** (about 8 s). The cube must sit still during startup.

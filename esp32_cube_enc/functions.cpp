@@ -39,6 +39,8 @@ void angle_setup() {
   delay (100);
   
   // Average 512 stationary samples on each gyro axis to measure its bias.
+  // The board LED stays on while this runs: keep the cube still.
+  digitalWrite(INT_LED, HIGH);
   beep();
   leds[2] = CRGB(0, 0, 200);
   FastLED.show();
@@ -102,6 +104,16 @@ void angle_setup() {
   leds[2] = CRGB::Black;
   FastLED.show();
   delay(300);
+
+  // Gyro check done: the board LED goes off and blinks three times quickly,
+  // so the cube can be picked up.
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(INT_LED, LOW);
+    delay(120);
+    digitalWrite(INT_LED, HIGH);
+    delay(120);
+  }
+  digitalWrite(INT_LED, LOW);
 }
 
 void angle_calc(float dt) {
@@ -139,14 +151,26 @@ void angle_calc(float dt) {
 
   // Use the calibration values for the currently detected pose: small |AcX|
   // means vertex mode, while a larger |AcX| means edge mode.
+  // The angles are relative to the captured pose; pose_tilt* is that pose's
+  // own tilt from gravity in the sensor frame, needed below for the spin
+  // correction.  (acZ* was stored as AcZ + 16384.)
+  float pose_tiltX = 0, pose_tiltY = 0;
   if (abs(AcX) < 2000) {
     AcXc = AcX - offsets.acXv;
     AcYc = AcY - offsets.acYv;
     AcZc = AcZ - offsets.acZv;
+    if (offsets.ID == 96) {
+      pose_tiltX = -atan2(offsets.acYv, -(offsets.acZv - 16384)) * 57.2958;
+      pose_tiltY = atan2(offsets.acXv, -(offsets.acZv - 16384)) * 57.2958;
+    }
   } else {
     AcXc = AcX - offsets.acXe;
     AcYc = AcY - offsets.acYe;
     AcZc = AcZ - offsets.acZe;
+    if (offsets.ID == 96) {
+      pose_tiltX = -atan2(offsets.acYe, -(offsets.acZe - 16384)) * 57.2958;
+      pose_tiltY = atan2(offsets.acXe, -(offsets.acZe - 16384)) * 57.2958;
+    }
   }
   // Remove the stationary gyro bias before integrating angular velocity.
   GyZ -= GyZ_offset;
@@ -162,12 +186,24 @@ void angle_calc(float dt) {
   // above it came out as a coarse staircase.  The divisor was wrong too:
   // 65.536 is the ±500°/s figure, so the estimate ran at twice the scale the
   // controller's own GyX / 131.0 rate terms assumed.  See GYRO_LSB_PER_DPS.
-  robot_angleY += GyY * dt / GYRO_LSB_PER_DPS;
+  //
+  // Spin correction: when the cube spins about the true vertical, a sensor
+  // that is tilted from it (the balance point is never exactly on the sensor
+  // axis) sees part of the spin on its X/Y gyros although nothing is tipping.
+  // Integrated as tilt, that put the estimate ~2° off while spinning at
+  // 12-15°/s (trace, 2026-10-03).  The cross terms are the small-angle
+  // kinematics of a gravity vector seen from a rotating body; they cancel
+  // that component exactly.  Tilt here is from gravity, so the captured
+  // pose's own tilt is added back.
+  float spin_dps = GyZ / GYRO_LSB_PER_DPS;
+  float tiltX_rad = (robot_angleX + pose_tiltX) / 57.2958f;
+  float tiltY_rad = (robot_angleY + pose_tiltY) / 57.2958f;
+  robot_angleY += (GyY / GYRO_LSB_PER_DPS - spin_dps * tiltX_rad) * dt;
   Acc_angleY = atan2(AcXc, -AcZc) * 57.2958;
   // Combine fast gyro response with the accelerometer's long-term reference.
   robot_angleY = robot_angleY * Gyro_amount + Acc_angleY * (1.0 - Gyro_amount);
 
-  robot_angleX += GyX * dt / GYRO_LSB_PER_DPS;
+  robot_angleX += (GyX / GYRO_LSB_PER_DPS + spin_dps * tiltY_rad) * dt;
   Acc_angleX = -atan2(AcYc, -AcZc) * 57.2958;
   robot_angleX = robot_angleX * Gyro_amount + Acc_angleX * (1.0 - Gyro_amount);
 
