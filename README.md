@@ -20,9 +20,16 @@ The older firmware without encoders (`ESP32_cube`) and the Arduino Nano port
 (`arduino_cube`) were removed from this branch. They are still available on the `main`
 branch.
 
-> The sensor orientation in `esp32_cube_enc` differs from the original cube. If you built
-> the earlier cube you need to reprint one part to use this code — or print the redesigned
-> cube: https://www.thingiverse.com/thing:6695891
+> The sensor orientation in `esp32_cube_enc` differs from the original cube. Upstream's
+> advice is to reprint one part, or print the redesigned cube:
+> https://www.thingiverse.com/thing:6695891. Alternatively, keep the original sensor holder
+> and set `IMU_MOUNT 1` in `esp32_cube_enc/ESP32.h`. If the cube still reads more than a few
+> degrees off at its vertex balance point (raw X on the dashboard far from 0), set
+> `IMU_TILT_Y_DEG` to that angle, `atan2(X, -Z)` in degrees.
+>
+> Motor numbering must also match the control geometry: motor 3 is the wheel that balances
+> the edge by itself, and if the vertex throws the cube over sideways, swap the pins of
+> motors 1 and 2 in `ESP32.h`.
 
 ## Hardware
 

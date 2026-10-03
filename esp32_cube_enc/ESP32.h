@@ -14,23 +14,25 @@
 
 #define BRAKE       26       // Motor-driver brake/enable input
 
-// Motor numbering follows the control geometry, not the wiring.  Seen from
-// above with the cube on its vertex (MPU6050 Z axis pointing down), motor 3
-// is the wheel on the sensor's X axis and motors 1 and 2 follow it clockwise.
-// On this cube that puts motor 1 on the D5 pin group, motor 2 on D4 and
-// motor 3 on D15; upstream's wiring had 1 = D4, 2 = D15, 3 = D5.  Verified
-// with motors_test (2026-10-03): each group's encoder belongs to its motor.
-#define DIR1        5
-#define ENC1_1      16
-#define ENC1_2      17
-#define PWM1        18
-#define PWM1_CH     2
+// Motor numbering follows the control geometry, not the wiring.  Motor 3 is
+// the wheel on the firmware's X axis (the one that balances the edge alone);
+// motors 1 and 2 share the Y axis, and swapping them reverses it.
+// On this cube motor 1 is the D4 pin group, motor 2 D5 and motor 3 D15;
+// upstream's wiring had 1 = D4, 2 = D15, 3 = D5.  Verified 2026-10-03:
+// motors_test showed each group's encoder belongs to its motor, the edge
+// balanced on motor 3, and with 1 and 2 the other way round the vertex
+// threw the cube over sideways.
+#define DIR1        4
+#define ENC1_1      35
+#define ENC1_2      33
+#define PWM1        32
+#define PWM1_CH     1
 
-#define DIR2        4
-#define ENC2_1      35
-#define ENC2_2      33
-#define PWM2        32
-#define PWM2_CH     1
+#define DIR2        5
+#define ENC2_1      16
+#define ENC2_2      17
+#define PWM2        18
+#define PWM2_CH     2
 
 #define DIR3        15
 #define ENC3_1      13
@@ -49,6 +51,28 @@
 
 #define accSens 0            // 0 = ±2 g, 1 = ±4 g, 2 = ±8 g, 3 = ±16 g
 #define gyroSens 0           // 0 = ±250°/s, 1 = ±500°/s, 2 = ±1000°/s, 3 = ±2000°/s
+
+// How the MPU6050 board is mounted.  The firmware works in the frame of
+// upstream's 2024 sensor holder: chip Z points down through the balancing
+// vertex, chip X runs (seen from above) along motor 3's wheel.
+//   0 = 2024 holder, readings used as-is.
+//   1 = original holder, board upright: chip X points down and chip Z points
+//       horizontally toward motor 3's wheel.  Readings are rotated into the
+//       2024 frame as they are read (X = -Z, Y = Y, Z = X), so everything
+//       downstream - pose detection, calibration, the dashboard's raw
+//       values - sees the 2024 frame.
+// This cube (2026-10-03): on the vertex the raw chip axes read X -16290,
+// Y ~100, so it uses mount 1.
+#define IMU_MOUNT 1
+
+// Remaining tilt of the sensor board about the firmware's Y axis, in
+// degrees: the firmware's own Y angle, atan2(AcX, -AcZ), read with the cube
+// held at its vertex balance point after the IMU_MOUNT rotation.  Accel and
+// gyro readings are rotated by it so the balance point reads X ~ 0.  Too
+// large to leave to the calibration offsets: a 20° tilt would also leak the
+// cube's spin about the vertical into the balance axes.
+// This cube (2026-10-03): X -6000, Z -16000 at the balance point -> -20.6°.
+#define IMU_TILT_Y_DEG  -20.6f
 
 // Raw gyro counts per degree/second, derived from the range selected above
 // (131 at ±250°/s, halving with each step up).  Every place that converts a

@@ -104,6 +104,18 @@ void angle_setup() {
   delay(300);
 }
 
+static void rotateY(int16_t& x, int16_t& z) {
+  // Rotate an (x, z) reading about the Y axis by IMU_TILT_Y_DEG, so that a
+  // reading at that angle, atan2(x, -z), comes out at zero.
+  static const float t = IMU_TILT_Y_DEG / 57.2958f;
+  static const float c = cosf(t), s = sinf(t);
+  if (IMU_TILT_Y_DEG == 0) return;
+  float rx = x * c + z * s;
+  float rz = -x * s + z * c;
+  x = (int16_t)constrain(lroundf(rx), -32768L, 32767L);
+  z = (int16_t)constrain(lroundf(rz), -32768L, 32767L);
+}
+
 void angle_calc(float dt) {
   // Read the three raw gyro registers (0x43 through 0x48).
   Wire.beginTransmission(MPU6050);
@@ -122,6 +134,18 @@ void angle_calc(float dt) {
   AcX = Wire.read() << 8 | Wire.read();
   AcY = Wire.read() << 8 | Wire.read();
   AcZ = Wire.read() << 8 | Wire.read();
+
+#if IMU_MOUNT == 1
+  // Rotate the upright board's axes into the firmware's frame (see
+  // IMU_MOUNT in ESP32.h).  Done before the gyro bias is removed, so the
+  // bias measured at boot is in the same frame as the readings it corrects.
+  { int16_t x = AcX, z = AcZ; AcX = -z; AcZ = x; }
+  { int16_t x = GyX, z = GyZ; GyX = -z; GyZ = x; }
+#endif
+  // Remove the board's remaining tilt about Y (IMU_TILT_Y_DEG in ESP32.h),
+  // again before the gyro bias, for the same reason.
+  rotateY(AcX, AcZ);
+  rotateY(GyX, GyZ);
 
   // Use the calibration values for the currently detected pose: small |AcX|
   // means vertex mode, while a larger |AcX| means edge mode.

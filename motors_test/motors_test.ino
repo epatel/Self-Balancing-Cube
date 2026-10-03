@@ -4,19 +4,19 @@
 #define BUZZER      27
 
 // Motor numbers follow esp32_cube_enc/ESP32.h (remapped for this cube:
-// 1 = D5 group, 2 = D4 group, 3 = D15 group; upstream was 1 = D4, 2 = D15,
+// 1 = D4 group, 2 = D5 group, 3 = D15 group; upstream was 1 = D4, 2 = D15,
 // 3 = D5).
-#define DIR1        5
-#define ENC1_1      16
-#define ENC1_2      17
-#define PWM1        18
-#define PWM1_CH     2
+#define DIR1        4
+#define ENC1_1      35
+#define ENC1_2      33
+#define PWM1        32
+#define PWM1_CH     1
 
-#define DIR2        4
-#define ENC2_1      35
-#define ENC2_2      33
-#define PWM2        32
-#define PWM2_CH     1
+#define DIR2        5
+#define ENC2_1      16
+#define ENC2_2      17
+#define PWM2        18
+#define PWM2_CH     2
 
 #define DIR3        15
 #define ENC3_1      13
