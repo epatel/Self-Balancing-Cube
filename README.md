@@ -23,9 +23,14 @@ branch.
 > The sensor orientation in `esp32_cube_enc` differs from the original cube. Upstream's
 > advice is to reprint one part, or print the redesigned cube:
 > https://www.thingiverse.com/thing:6695891. Alternatively, keep the original sensor holder
-> and set `IMU_MOUNT 1` in `esp32_cube_enc/ESP32.h`. If the cube still reads more than a few
-> degrees off at its vertex balance point (raw X on the dashboard far from 0), set
-> `IMU_TILT_Y_DEG` to that angle, `atan2(X, -Z)` in degrees.
+> and set `IMU_MOUNT 1` in `esp32_cube_enc/ESP32.h`.
+>
+> If the cube reads far from upright at its vertex balance point (raw X or Y on the
+> dashboard well away from 0), check the accelerometer before assuming the sensor is
+> tilted: some MPU6050s have a large zero offset on one axis. Lay the cube still on its
+> three wheel faces, note the raw `X Y Z` for each, and run
+> `python tools/accel_offsets.py X,Y,Z X,Y,Z X,Y,Z`. It prints `ACC_OFFSET_*` values for
+> `ESP32.h` and the board's real tilt. Recalibrate after changing them.
 >
 > Motor numbering must also match the control geometry: motor 3 is the wheel that balances
 > the edge by itself, and if the vertex throws the cube over sideways, swap the pins of

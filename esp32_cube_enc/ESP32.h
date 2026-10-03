@@ -65,14 +65,18 @@
 // Y ~100, so it uses mount 1.
 #define IMU_MOUNT 1
 
-// Remaining tilt of the sensor board about the firmware's Y axis, in
-// degrees: the firmware's own Y angle, atan2(AcX, -AcZ), read with the cube
-// held at its vertex balance point after the IMU_MOUNT rotation.  Accel and
-// gyro readings are rotated by it so the balance point reads X ~ 0.  Too
-// large to leave to the calibration offsets: a 20° tilt would also leak the
-// cube's spin about the vertical into the balance axes.
-// This cube (2026-10-03): X -6000, Z -16000 at the balance point -> -20.6°.
-#define IMU_TILT_Y_DEG  -20.6f
+// Accelerometer zero offsets, in raw counts on the CHIP's own axes, removed
+// before the IMU_MOUNT rotation.  Some MPU6050s read far from zero on one
+// axis; a large offset looks like the sensor being tilted, but correcting it
+// with a rotation also turns the gyro and leaks the cube's spin into the
+// balance axes.  Measure with tools/accel_offsets.py: lay the cube still on
+// three faces that meet at a corner and give it the dashboard's raw values.
+// This cube (2026-10-03): chip Z reads +6255 (0.38 g) too high; with that
+// removed the faces come out 90.0° apart and the board's real tilt is 1.6°,
+// small enough for the calibration capture to absorb.
+#define ACC_OFFSET_X    -77
+#define ACC_OFFSET_Y    -85
+#define ACC_OFFSET_Z   6255
 
 // Raw gyro counts per degree/second, derived from the range selected above
 // (131 at ±250°/s, halving with each step up).  Every place that converts a

@@ -99,10 +99,12 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
   interrupts, and the ISRs are not in IRAM, so counts are lost across a flash write.
 - **EEPROM layout**: calibration offsets at address 0 (`ID == 96`), gains and learned trim
   at address 32 (`GAINS_ID`). Changing `OffsetsObj` invalidates a calibrated cube.
-- **Sensor frame**: `angle_calc()` rotates raw readings into the 2024-holder frame
-  (`IMU_MOUNT`, then `IMU_TILT_Y_DEG` in `ESP32.h`) before anything else uses them, so
-  `AcX..GyZ` are never raw chip axes. This cube: `IMU_MOUNT 1` (board upright),
-  tilt −20.6°.
+- **Sensor frame**: `angle_calc()` subtracts `ACC_OFFSET_*` (chip axes) and then rotates
+  readings into the 2024-holder frame (`IMU_MOUNT`) before anything else uses them, so
+  `AcX..GyZ` are never raw chip axes. This cube: `IMU_MOUNT 1` (board upright), chip Z
+  accelerometer offset +6255 (0.38 g). A big accel offset looks like a tilt — don't
+  "fix" it with a rotation, which also turns the gyro. Measure with
+  `tools/accel_offsets.py` (three face readings).
 - **Motor numbering** is set by the control geometry: motor 3 alone balances the edge;
   swapping motors 1 and 2 reverses the vertex Y axis. This cube: 1 = D4, 2 = D5, 3 = D15
   pin groups (upstream 1 = D4, 2 = D15, 3 = D5).
