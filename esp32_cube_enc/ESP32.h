@@ -94,8 +94,9 @@
 
 // Tuning gains are saved after the offsets struct.
 #define GAINS_EEPROM_ADDR 32
-#define NUM_GAINS         14   // 10 balancing gains, auto-trim rate, heading hold,
-                               // battery-compensation nominal voltage, auto-arm
+#define NUM_GAINS         15   // 10 balancing gains, auto-trim rate, heading hold,
+                               // battery-compensation nominal voltage, auto-arm,
+                               // zK3 scale while spinning
 // Marks a valid saved gain set.  Bump it only if the ORDER of GAIN_DEFS
 // changes or the fixed fields below move - not merely because a gain was
 // added or removed.  The record carries its own count and keeps the
@@ -237,6 +238,13 @@ extern float batt_comp;      // factor currently applied, for the dashboard
 // without connecting to the dashboard.  0 = boot disarmed (default).  Stored
 // as a gain so it is switched and saved from the dashboard.
 extern float autoArm;
+
+// Spin lag fix: zK3 (wheel unwind) is multiplied by zK3s while a spin is
+// commanded, which cuts the lag behind the commanded rate.  1 = unchanged
+// (default); e.g. 0.25 cuts the lag about fourfold.  The cube then really
+// spins faster, so friction winds the wheels up sooner and the wind-up guard
+// ends a long spin earlier.
+extern float zK3s;
 
 // --- Web command interface (see web_interface.cpp) ---------------------
 // HTTP handlers never touch the motors.  They only store a request here,

@@ -93,6 +93,9 @@ const GainDef GAIN_DEFS[] = {
   // Demo mode, appended likewise: 1 = arm at boot without the dashboard
   // (takes effect at the next boot, after Save), 0 = boot disarmed.
   {"autoArm", &autoArm, 0.0, 1.0, 0.0 },  // auto-arm at boot
+  // Spin lag fix, appended likewise: zK3 scale while a spin is commanded.
+  // 1 = unchanged, lower = less lag but faster wheel wind-up.
+  {"zK3s", &zK3s, 0.0, 1.0, 1.0 },        // zK3 scale while spinning
 };
 // Keep the table and the EEPROM record in step at compile time.
 static_assert(sizeof(GAIN_DEFS) / sizeof(GAIN_DEFS[0]) == NUM_GAINS,

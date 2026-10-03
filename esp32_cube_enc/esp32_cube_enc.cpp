@@ -58,6 +58,7 @@ float batt_voltage = 0;
 BattState batt_state = BATT_NONE;
 float vNom = 0;                // battery compensation off until enabled
 float autoArm = 0;             // demo mode: arm at boot when 1
+float zK3s = 1.0f;             // zK3 scale while spinning; 1 = unchanged
 float batt_comp = 1.0f;
 
 volatile uint8_t web_cmd_pending = WEB_CMD_NONE;
@@ -410,7 +411,15 @@ void loop() {
       // heading when the command is zero, and spins at the commanded rate
       // otherwise.  Injecting the setpoint here leaves the loop's stability
       // untouched - only its target changes.
-      int pwm_Z = constrain(zK2 * (gyroZ - yaw_rate_cmd) + zK3 * motors_speed_Z, -255, 255);
+      //
+      // The zK3 wheel-sum term unwinds the wheels, but during a spin they must
+      // stay wound up, so the two terms fight and the cube lags the command by
+      // about zK3 * wheel_sum / zK2 (7.4°/s at 20°/s in the 2026-10-03 trace).
+      // While a spin is commanded zK3 is scaled by zK3s, blended in over the
+      // first 5°/s of command so standing still keeps the full unwind.
+      float spin_amt = constrain(fabsf(yaw_rate_cmd) / 5.0f, 0.0f, 1.0f);
+      float zK3_eff = zK3 * (1.0f - spin_amt * (1.0f - zK3s));
+      int pwm_Z = constrain(zK2 * (gyroZ - yaw_rate_cmd) + zK3_eff * motors_speed_Z, -255, 255);
 
       // A small accumulated speed correction acts like an integral term.
       motors_speed_X += speed_X / 5; 

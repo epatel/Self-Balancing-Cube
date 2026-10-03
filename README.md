@@ -128,8 +128,8 @@ voltage, status and a live trace of the control loop. From it you can:
 - **SAFE STOP / ARM / DISARM** — stop the motors and keep them stopped
 - **Calibrate** — start, capture each pose, save to EEPROM
 - **Tune gains** — edit K1–K4, zK2, zK3, eK1–eK4, the auto-trim rate `tK`, heading hold
-  `zK1`, battery compensation `vNom` and demo mode `autoArm` live, with validation and
-  limits.
+  `zK1`, battery compensation `vNom`, demo mode `autoArm` and the spin-lag scale `zK3s`
+  live, with validation and limits.
   Changes apply immediately but are only written to EEPROM when you press Save. There is
   also a Restore Defaults button.
 - **Yaw** — command a rotation rate about the vertical axis, turn by a number of degrees,
@@ -139,7 +139,10 @@ voltage, status and a live trace of the control loop. From it you can:
   255), so a spin command cannot knock the cube over. Holding a spin makes the wheels speed
   up continuously (friction at the corner keeps slowing the cube), so when their average
   speed passes 70 counts per tick the spin is ramped to a stop and the dashboard shows
-  "wheels wound up" until they slow down again.
+  "wheels wound up" until they slow down again. By default the cube spins slower than
+  commanded (about 7 °/s short at 20 °/s), because the term that unwinds the wheels resists
+  the spin; setting `zK3s` below 1 (e.g. 0.25) weakens that term while spinning, so the
+  cube follows the command more closely but the guard ends a long spin sooner.
 - **Auto-trim** — let the cube learn its true balance point from sustained wheel speed
   (`tK`, off by default). The learned trim is saved with the gains.
 
