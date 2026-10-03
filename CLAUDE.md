@@ -29,8 +29,8 @@ These are separate translation units, not concatenated `.ino` files: anything ca
 files needs a prototype in `ESP32.h`, and a global must be defined once in
 `esp32_cube_enc.cpp` and declared `extern` in the header.
 
-The legacy sketches (`ESP32_cube`, `arduino_cube`) are not on this branch; they are on
-`main`.
+The legacy sketches (`ESP32_cube`, `arduino_cube`, and the Bluetooth `esp32_cube_enc`)
+are gone from the branches; they are at the tag `legacy` (67ed329).
 
 ## Build, flash, test
 

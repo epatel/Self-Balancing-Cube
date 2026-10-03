@@ -84,6 +84,6 @@ Why this combination:
 - **`motors_test` from `development`** — it is still a plain `.ino`, and it is the only version that builds on esp32 core 3.x, which is what is installed here (3.0.3).
 - **`esp32_cube_enc` from `development`** — for an unverified build the decisive features are that it boots disarmed with the brake on, shows raw accelerometer values live, has a SAFE STOP, and clamps motor commands. `main` self-engages on pose detection, which is the wrong behaviour while motor order and polarity are unknown.
 - **`001a276` as a diagnostic step** — it already has the safe boot, clamping, dashboard and trace, but still the original estimator the default gains were tuned for. If the cube balances there and not on HEAD, the cause is tuning, not wiring.
-- **`main`** is only the fallback: `ESP32_cube` if there are no encoders or the sensor stays in the legacy orientation (needs core 2.x), or `esp32_cube_enc` if PlatformIO is unavailable.
+- **`main`** (since 2026-10-03 the tag `legacy`; `main` now carries the development firmware) is only the fallback: `ESP32_cube` if there are no encoders or the sensor stays in the legacy orientation (needs core 2.x), or `esp32_cube_enc` if PlatformIO is unavailable.
 
 Before the first armed run: change the Wi-Fi password, and check the dashboard battery voltage against a multimeter.

@@ -17,8 +17,9 @@ ESP32, MPU6050, Nidec 24H brushless motors, 500 mAh LiPo battery.
 | [`PCBGerber/`](PCBGerber) | Gerber files for a PCB. |
 
 The older firmware without encoders (`ESP32_cube`) and the Arduino Nano port
-(`arduino_cube`) were removed from this branch. They are still available on the `main`
-branch.
+(`arduino_cube`) were removed. They are still available at the git tag `legacy`
+(`git checkout legacy`), together with the original Bluetooth version of
+`esp32_cube_enc`.
 
 > The sensor orientation in `esp32_cube_enc` differs from the original cube. Upstream's
 > advice is to reprint one part, or print the redesigned cube:
