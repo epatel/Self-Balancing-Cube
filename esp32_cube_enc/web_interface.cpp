@@ -84,6 +84,11 @@ const GainDef GAIN_DEFS[] = {
   // rate clamp beyond 90° of error.  0 disables heading hold entirely,
   // leaving the yaw command fully manual.
   {"zK1", &zK1,  0.0,  10.0,  1.0  },  // heading hold
+  // Battery-voltage compensation (see vNom in ESP32.h), appended for the
+  // same reason.  0 = off; otherwise the pack voltage the gains were tuned
+  // at, e.g. 11.5.  Values well below a real pack voltage just hit the
+  // compensation clamp.
+  {"vNom", &vNom, 0.0,  13.0,  0.0  },  // battery compensation
 };
 // Keep the table and the EEPROM record in step at compile time.
 static_assert(sizeof(GAIN_DEFS) / sizeof(GAIN_DEFS[0]) == NUM_GAINS,
@@ -444,7 +449,8 @@ function poll(){
    $('b'+(i+1)).style.width=(Math.abs(s[i])/mmax*100)+'%';
   }
   // Battery pill: green ok, amber low, red cutoff, plain on USB power.
-  var bs=d.batt_state,bt=d.batt_voltage.toFixed(2)+' V';
+  var bs=d.batt_state,bt=d.batt_voltage.toFixed(2)+' V'+
+         (d.batt_comp!=1?' ×'+d.batt_comp.toFixed(2):'');
   pill($('bv'),bs=='cutoff'?'off':(bs=='low'?'live':(bs=='ok'?'on':'')),
        bs=='cutoff'?'BATTERY CUTOFF '+bt:(bs=='low'?'BATTERY LOW '+bt:
        (bs=='none'?'NO BATTERY':bt)));
@@ -790,8 +796,8 @@ void handleApiState() {
   // 640 rather than 512: the raw accelerometer values and cal_result string
   // added when Bluetooth was removed push the worst case past the old size,
   // and snprintf truncates silently - which would emit malformed JSON.
-  // 768 since batt_state was added.
-  char json[768];
+  // 832 since batt_state and batt_comp were added.
+  char json[832];
   int n = snprintf(json, sizeof(json),
     "{"
       "\"robot_angleX\":%.3f,"
@@ -812,6 +818,7 @@ void handleApiState() {
       "\"armed\":%s,"
       "\"batt_voltage\":%.2f,"
       "\"batt_state\":\"%s\","      // none | ok | low | cutoff
+      "\"batt_comp\":%.3f,"         // motor compensation factor, 1 = off
       // Raw accelerometer counts.  During a first-time calibration the
       // corrected angles above are computed from EEPROM garbage, so these
       // are the only trustworthy numbers - and the pose accept/reject
@@ -839,7 +846,7 @@ void handleApiState() {
     calibrating       ? "true" : "false",
     vertex_calibrated ? "true" : "false",
     armed             ? "true" : "false",
-    batt_voltage, battStateName(),
+    batt_voltage, battStateName(), batt_comp,
     AcX, AcY, AcZ, trimX, trimY, yaw_rate_cmd,
     robot_yaw, yaw_hold ? "true" : "false",
     cal_result);

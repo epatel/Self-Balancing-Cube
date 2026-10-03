@@ -56,6 +56,8 @@ long currentT, previousT_1, previousT_2;
 
 float batt_voltage = 0;
 BattState batt_state = BATT_NONE;
+float vNom = 0;                // battery compensation off until enabled
+float batt_comp = 1.0f;
 
 volatile uint8_t web_cmd_pending = WEB_CMD_NONE;
 

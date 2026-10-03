@@ -117,7 +117,8 @@ voltage, status and a live trace of the control loop. From it you can:
 
 - **SAFE STOP / ARM / DISARM** — stop the motors and keep them stopped
 - **Calibrate** — start, capture each pose, save to EEPROM
-- **Tune gains** — edit K1–K4, zK2, zK3 and eK1–eK4 live, with validation and limits.
+- **Tune gains** — edit K1–K4, zK2, zK3, eK1–eK4, the auto-trim rate `tK`, heading hold
+  `zK1` and battery compensation `vNom` live, with validation and limits.
   Changes apply immediately but are only written to EEPROM when you press Save. There is
   also a Restore Defaults button.
 - **Yaw** — command a rotation rate about the vertical axis, turn by a number of degrees,
@@ -170,6 +171,13 @@ The firmware checks the 3S pack twice a second (smoothed over a couple of second
 | below 10.5 V | LOW | slow blink on the ESP32 board's LED, the WS2812s and the buzzer (if fitted); dashboard shows BATTERY LOW |
 | below 9.9 V for 2 s | CUTOFF | disarms (the cube drops if it was balancing), fast blink; arming is refused until the pack reads 10.8 V or the cube is restarted |
 | below 6 V | no battery | running from USB only; no warning |
+
+**Voltage compensation (optional).** As the pack drains, the same motor command gives less
+torque and the controller gets weaker. Set the gain `vNom` in the dashboard's gains panel
+to the voltage your gains were tuned at (e.g. `11.5`) and every motor command is scaled by
+`vNom / battery voltage` (limited to ×0.90–×1.25), so the cube behaves the same across the
+discharge; the battery pill then shows the factor, e.g. `10.80 V ×1.06`. `0` (the default)
+turns it off. It cannot add torque a flat pack does not have.
 
 The voltage divider constant `BATT_ADC_PER_VOLT` in `esp32_cube_enc/ESP32.h` (225) depends
 on your board's resistors and must be adjusted by measuring your actual battery voltage.

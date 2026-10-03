@@ -238,6 +238,12 @@ void battCheck() {
   else
     batt_voltage = 0.7f * batt_voltage + 0.3f * v;
 
+  // Compensation factor for the motor commands (see vNom in ESP32.h).
+  if (vNom > 0 && batt_voltage >= BATT_PRESENT_V)
+    batt_comp = constrain(vNom / batt_voltage, BATT_COMP_MIN, BATT_COMP_MAX);
+  else
+    batt_comp = 1.0f;
+
   static int low_count = 0;
   BattState previous = batt_state;
   if (batt_voltage < BATT_PRESENT_V) {
@@ -315,6 +321,9 @@ void pwmSet(uint8_t pin, uint32_t value) {
 void Motor1_control(int sp) {
   // Add the measured speed so the command includes motor-speed feedback.
   sp = sp + motor1_speed;
+  // Battery compensation (vNom in ESP32.h): scale the whole drive, speed
+  // feedback included, so the motor sees the voltage it would at vNom.
+  sp = lroundf(sp * batt_comp);
   // The caller's command is already limited to +/-255, but adding the
   // encoder feedback can push past it.  Without this clamp, 255 - abs(sp)
   // would go negative and wrap to a huge value in pwmSet's uint32_t duty
@@ -332,6 +341,7 @@ void Motor1_control(int sp) {
 void Motor2_control(int sp) {
   // Motor 2 uses the same direction and inverted-PWM convention as motor 1.
   sp = sp + motor2_speed;
+  sp = lroundf(sp * batt_comp);    // see Motor1_control
   sp = constrain(sp, -255, 255);   // see Motor1_control
   if (sp < 0)
     digitalWrite(DIR2, LOW);
@@ -343,6 +353,7 @@ void Motor2_control(int sp) {
 void Motor3_control(int sp) {
   // Motor 3 uses the same direction and inverted-PWM convention as motor 1.
   sp = sp + motor3_speed;
+  sp = lroundf(sp * batt_comp);    // see Motor1_control
   sp = constrain(sp, -255, 255);   // see Motor1_control
   if (sp < 0)
     digitalWrite(DIR3, LOW);

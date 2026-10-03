@@ -94,7 +94,8 @@
 
 // Tuning gains are saved after the offsets struct.
 #define GAINS_EEPROM_ADDR 32
-#define NUM_GAINS         12   // 10 balancing gains, auto-trim rate, heading hold
+#define NUM_GAINS         13   // 10 balancing gains, auto-trim rate, heading hold,
+                               // battery-compensation nominal voltage
 // Marks a valid saved gain set.  Bump it only if the ORDER of GAIN_DEFS
 // changes or the fixed fields below move - not merely because a gain was
 // added or removed.  The record carries its own count and keeps the
@@ -216,6 +217,21 @@ enum BattState { BATT_NONE, BATT_OK, BATT_LOW, BATT_CUTOFF };
 // Stored here so the web interface can report them through /api/state.
 extern float batt_voltage;
 extern BattState batt_state;
+
+// Battery-voltage compensation.  PWM duty sets roughly what fraction of the
+// pack voltage reaches a motor, so as the pack sags the same command gives
+// less torque and the whole controller gets weaker.  With compensation on,
+// every motor command is multiplied by vNom / batt_voltage, so the motors see
+// the drive they would at vNom and one set of gains holds across the
+// discharge.  It cannot add torque the pack does not have: near full output a
+// low pack still saturates sooner.
+// vNom is a tunable gain: 0 = off (default), otherwise the voltage the gains
+// were tuned at (about 11.5 V on this cube).  The factor is clamped and is
+// 1 whenever no pack is detected.
+#define BATT_COMP_MIN  0.90f
+#define BATT_COMP_MAX  1.25f
+extern float vNom;
+extern float batt_comp;      // factor currently applied, for the dashboard
 
 // --- Web command interface (see web_interface.cpp) ---------------------
 // HTTP handlers never touch the motors.  They only store a request here,

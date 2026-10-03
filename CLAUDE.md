@@ -117,6 +117,9 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
   to ~4 V. `BATT_ADC_PER_VOLT` (225) is hand-measured per board — use `battery_test`.
   Upstream had `/ 204` and only a buzzer between 8 and 9.5 V.
 - **`INT_LED` (GPIO2)** is the low-battery indicator; this cube has no buzzer.
+- **Battery compensation**: gain `vNom` (0 = off) makes `battCheck()` set `batt_comp =
+  vNom / batt_voltage` (clamped 0.90–1.25), applied in `MotorN_control()` after the
+  speed term. Leave it off when comparing tuning changes, or results get confounded.
 - **Default gains** are upstream's and predate the gyro-scale fix. Don't change them as a
   side effect of other work.
 - **The Wi-Fi password** is a constant in `web_interface.cpp`. Don't commit a real one.
