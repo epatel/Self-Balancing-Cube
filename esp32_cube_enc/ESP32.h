@@ -265,9 +265,12 @@ extern float zK3s;
 // ramps yaw_rate_cmd toward it at YAW_ACCEL: a step in the rate command is a
 // step in yaw effort on all three wheels at once, which used to take the
 // balance's headroom away and knock the cube over.
-#define YAW_RATE_MAX  45.0f    // slider/API clamp, °/s (was 90: zK2 * 90 is
-                               // three times the whole motor range)
-#define YAW_TURN_RATE 25.0f    // fastest rate the heading loop asks for, °/s
+// Spin speed limit, tested 2026-10-03 with zK3s = 0.25: about 19 °/s real
+// spin balanced calmly until the wind-up guard ended it; at about 24 °/s a
+// single jolt (likely the corner slipping) could not be recovered and the
+// cube fell.  Upstream allowed 90 (zK2 * 90 is three times the motor range).
+#define YAW_RATE_MAX  20.0f    // slider/API clamp, °/s
+#define YAW_TURN_RATE 20.0f    // fastest rate the heading loop asks for, °/s
 #define YAW_ACCEL     30.0f    // max change of yaw_rate_cmd, °/s per second
 // Yaw effort added to every motor is capped here, and further limited to the
 // headroom the balancing axes leave on the busiest motor (XYZ_to_threeWay),

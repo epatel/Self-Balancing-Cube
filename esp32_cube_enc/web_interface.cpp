@@ -81,7 +81,7 @@ const GainDef GAIN_DEFS[] = {
   //
   // Outer heading loop, °/s of yaw commanded per ° of heading error.  1.0
   // approaches a target with a ~1 s time constant and saturates the
-  // YAW_TURN_RATE clamp (25°/s) beyond 25° of error; the loop also ramps the
+  // YAW_TURN_RATE clamp (20°/s) beyond 20° of error; the loop also ramps the
   // command at YAW_ACCEL.  0 disables heading hold entirely,
   // leaving the yaw command fully manual.
   {"zK1", &zK1,  0.0,  10.0,  1.0  },  // heading hold
@@ -361,7 +361,7 @@ more damping (K2), slow wander means more angle gain (K1).</p>
 <details><summary>Motion</summary><div class="bd">
 <div style="display:flex;justify-content:space-between;align-items:baseline">
 <span class="k">Yaw rate</span><b class="m" id="yv">0 °/s</b></div>
-<input type="range" id="yaw" min="-45" max="45" step="5" value="0">
+<input type="range" id="yaw" min="-20" max="20" step="5" value="0">
 <button class="b w1" id="ystop" style="margin-top:8px">Stop spin</button>
 <p class="note">Spins the cube about its vertical axis while balancing.
 The spin ramps up and down gently, and yields to balancing when the wheels
@@ -525,8 +525,8 @@ var CH=[['ax','#ffab1f',800,1,'tilt X'],  // centidegrees, +/-8 deg window
         ['px','#ff453a',255,1,'pwm X'],
         ['py','#c084fc',255,0,'pwm Y'],
         ['m3','#f97316',450,0,'wheel 3'],
-        ['gz','#22d3ee',450,0,'yaw rate'],  // tenths of deg/s, +/-45 deg/s
-        ['yc','#facc15',450,0,'yaw cmd'],   // same scale, so they overlay
+        ['gz','#22d3ee',250,0,'yaw rate'],  // tenths of deg/s, +/-25 deg/s
+        ['yc','#facc15',250,0,'yaw cmd'],   // same scale, so they overlay
         ['pz','#f472b6',255,0,'pwm Z']];
 function pollTrace(){
  return fetch('/api/trace?since='+tSeq,{cache:'no-store'})

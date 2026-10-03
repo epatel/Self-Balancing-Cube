@@ -119,6 +119,9 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
   zK3 wheel-sum term still opposes a sustained spin: lag ≈ zK3·(wheel sum)/zK2, about
   10 °/s at a 20 °/s command after a minute (trace 2026-10-03). Gain `zK3s` (default 1)
   scales zK3 while a spin is commanded, blended over the first 5 °/s of `yaw_rate_cmd`.
+  Tested: 0.25 cuts the lag to ~1.5 °/s. Spin is capped at 20 °/s (`YAW_RATE_MAX`,
+  `YAW_TURN_RATE`): ~19 °/s real held, ~24 °/s fell after a jolt. Don't raise the cap
+  without a trace showing it holds.
 - **Spinning winds the wheels up** (contact friction), so `yaw_guard` stops spins when the
   smoothed average signed wheel speed `wheel_wind` passes `YAW_WHEEL_LIMIT` (70). Use the
   average, not the fastest wheel: balancing alone moves single wheels past 80.

@@ -134,7 +134,7 @@ voltage, status and a live trace of the control loop. From it you can:
   also a Restore Defaults button.
 - **Yaw** — command a rotation rate about the vertical axis, turn by a number of degrees,
   or hold the current heading (`zK1`). Heading is gyro dead reckoning, not a compass, so it
-  drifts over minutes. Rates are limited to ±45 °/s (turns to 25 °/s), commands ramp at
+  drifts over minutes. Rates are limited to ±20 °/s (turns too), commands ramp at
   30 °/s², and the spin only gets the motor range balancing leaves free (at most 60 of
   255), so a spin command cannot knock the cube over. Holding a spin makes the wheels speed
   up continuously (friction at the corner keeps slowing the cube), so when their average
