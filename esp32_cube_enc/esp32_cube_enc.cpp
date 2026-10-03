@@ -93,6 +93,7 @@ const char* cal_result = "";   // see ESP32.h
 TraceSample trace_buf[TRACE_LEN];
 uint32_t trace_seq = 0;
 int16_t trace_pwmX = 0, trace_pwmY = 0;
+int16_t trace_pwmZ = 0;
 
 void setup() {
   // ---- MOTOR SAFETY: this block must run before anything slow. ----
@@ -309,8 +310,9 @@ void loop() {
 
     // Take the yaw-rate request set by the HTTP handler and clamp it.  The
     // handler validates too; this is the authoritative limit, so a bad
-    // value can never reach the controller.
-    yaw_rate_cmd = constrain(yaw_rate_request, -YAW_RATE_MAX, YAW_RATE_MAX);
+    // value can never reach the controller.  It is a target: the vertex
+    // branch ramps yaw_rate_cmd toward it.
+    float rate_target = constrain(yaw_rate_request, -YAW_RATE_MAX, YAW_RATE_MAX);
 
     // Vertex mode controls two tilt axes and the common Z rotation axis.
     // "armed" gates both balancing branches; when false the else branch
@@ -340,9 +342,14 @@ void loop() {
       // slider drives, so the inner rate loop below is untouched.  No
       // angle wrapping on purpose: target and heading share one unbounded
       // frame, which is what makes "turn 720" mean two full spins.
+      // Turns are capped at YAW_TURN_RATE, gentler than the slider's limit.
       if (yaw_hold)
-        yaw_rate_cmd = constrain(zK1 * (yaw_target - robot_yaw),
-                                 -YAW_RATE_MAX, YAW_RATE_MAX);
+        rate_target = constrain(zK1 * (yaw_target - robot_yaw),
+                                -YAW_TURN_RATE, YAW_TURN_RATE);
+      // Ramp the command toward the target instead of stepping it, so the
+      // yaw effort builds gradually on all three wheels.
+      float yaw_step = YAW_ACCEL * dt;
+      yaw_rate_cmd += constrain(rate_target - yaw_rate_cmd, -yaw_step, yaw_step);
 
       // Learn the true balance point.  Sustained wheel speed in one
       // direction means the setpoint is on the wrong side of the real
@@ -403,6 +410,8 @@ void loop() {
       Motor3_control(pwm_X);
       trace_pwmX = pwm_X;          // edge mode drives only the X effort
       trace_pwmY = 0;
+      trace_pwmZ = 0;
+      yaw_rate_cmd = 0;            // no yaw control on an edge
     } else {
       // If the cube is not in a recognized balancing pose, stop applying
       // drive and engage the brake.  This protects the motors during setup or
@@ -413,6 +422,7 @@ void loop() {
       motors_speed_Y = 0;
       trace_pwmX = 0;              // no drive commanded while idle
       trace_pwmY = 0;
+      yaw_rate_cmd = 0;            // re-entering vertex mode ramps from rest
     }
     // Record this iteration into the telemetry trace, whichever branch ran:
     // the moments around a fall are the ones worth plotting.

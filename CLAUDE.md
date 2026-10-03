@@ -108,6 +108,11 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
 - **Motor numbering** is set by the control geometry: motor 3 alone balances the edge;
   swapping motors 1 and 2 reverses the vertex Y axis. This cube: 1 = D4, 2 = D5, 3 = D15
   pin groups (upstream 1 = D4, 2 = D15, 3 = D5).
+- **Yaw shares the motors with balance**: `pwm_Z` is added to every motor, so
+  `XYZ_to_threeWay()` limits it to the headroom left after the tilt axes and speed
+  feedback, capped at `YAW_PWM_MAX`. Rate commands are ramped (`YAW_ACCEL`) toward
+  `rate_target`; keep both, or a slider step or a turn saturates all three motors. The
+  zK3 wheel-sum term still opposes a sustained spin (steady-state lag), not yet fixed.
 - **Gyro scale**: always convert raw rates with `GYRO_LSB_PER_DPS`; never hard-code 131 or
   65.536 (`test_estimator.py` checks this).
 - **Gyro offsets are measured at boot** (about 8 s). The cube must sit still during startup.

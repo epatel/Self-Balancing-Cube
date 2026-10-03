@@ -80,8 +80,9 @@ const GainDef GAIN_DEFS[] = {
   // at the default (see the ESP32.h note above GAINS_ID).
   //
   // Outer heading loop, °/s of yaw commanded per ° of heading error.  1.0
-  // approaches a target with a ~1 s time constant and saturates the ±90°/s
-  // rate clamp beyond 90° of error.  0 disables heading hold entirely,
+  // approaches a target with a ~1 s time constant and saturates the
+  // YAW_TURN_RATE clamp (25°/s) beyond 25° of error; the loop also ramps the
+  // command at YAW_ACCEL.  0 disables heading hold entirely,
   // leaving the yaw command fully manual.
   {"zK1", &zK1,  0.0,  10.0,  1.0  },  // heading hold
   // Battery-voltage compensation (see vNom in ESP32.h), appended for the
@@ -350,10 +351,11 @@ more damping (K2), slow wander means more angle gain (K1).</p>
 <details><summary>Motion</summary><div class="bd">
 <div style="display:flex;justify-content:space-between;align-items:baseline">
 <span class="k">Yaw rate</span><b class="m" id="yv">0 °/s</b></div>
-<input type="range" id="yaw" min="-90" max="90" step="5" value="0">
+<input type="range" id="yaw" min="-45" max="45" step="5" value="0">
 <button class="b w1" id="ystop" style="margin-top:8px">Stop spin</button>
 <p class="note">Spins the cube about its vertical axis while balancing.
-Returns to zero on stop, disarm or arm.</p>
+The spin ramps up and down gently, and yields to balancing when the wheels
+are busy. Returns to zero on stop, disarm or arm.</p>
 <div style="display:flex;justify-content:space-between;align-items:baseline">
 <span class="k">Heading</span><b class="m" id="hv">—</b></div>
 <div class="ab" style="margin:0">
@@ -512,7 +514,10 @@ var CH=[['ax','#ffab1f',800,1,'tilt X'],  // centidegrees, +/-8 deg window
         ['gy','#58a6ff',2500,0,'gyro Y'],
         ['px','#ff453a',255,1,'pwm X'],
         ['py','#c084fc',255,0,'pwm Y'],
-        ['m3','#f97316',450,0,'wheel 3']];
+        ['m3','#f97316',450,0,'wheel 3'],
+        ['gz','#22d3ee',450,0,'yaw rate'],  // tenths of deg/s, +/-45 deg/s
+        ['yc','#facc15',450,0,'yaw cmd'],   // same scale, so they overlay
+        ['pz','#f472b6',255,0,'pwm Z']];
 function pollTrace(){
  return fetch('/api/trace?since='+tSeq,{cache:'no-store'})
  .then(function(r){return r.text();})
@@ -520,7 +525,7 @@ function pollTrace(){
   var rows=txt.trim().split('\n');
   for(var i=1;i<rows.length;i++){       // row 0 is the header
    var v=rows[i].split(',').map(Number);
-   if(v.length<11)continue;
+   if(v.length<14)continue;
    // A gap in seq means the ring lapped us; break the line honestly.
    if(T.length&&v[0]>tSeq+1)T.push(null);
    tSeq=v[0];
@@ -538,7 +543,8 @@ function drawTrace(){
  var N=400,start=Math.max(0,T.length-N);         // ~6 s window
  CH.forEach(function(ch){
   if(!ch[3])return;
-  var col={ax:2,ay:3,gx:4,gy:5,m1:6,m2:7,m3:8,px:9,py:10}[ch[0]];
+  var col={ax:2,ay:3,gx:4,gy:5,m1:6,m2:7,m3:8,px:9,py:10,
+           gz:11,yc:12,pz:13}[ch[0]];
   g.strokeStyle=ch[1];g.beginPath();
   var pen=false;
   for(var i=start;i<T.length;i++){
@@ -565,7 +571,7 @@ $('tpause').onclick=function(){
 };
 $('tsave').onclick=function(){
  // Rebuild CSV from everything accumulated, gaps marked as blank lines.
- var out='seq,t,ax,ay,gx,gy,m1,m2,m3,px,py\n';
+ var out='seq,t,ax,ay,gx,gy,m1,m2,m3,px,py,gz,yc,pz\n';
  T.forEach(function(s){out+=s?s.join(',')+'\n':'\n';});
  var a=document.createElement('a');
  a.href=URL.createObjectURL(new Blob([out],{type:'text/csv'}));
@@ -960,25 +966,27 @@ void handleApiTrace() {
   uint32_t from = since + 1;
   if (from < oldest) from = oldest;
 
-  // Cap one response at 40 samples (~1.6 KB) so a lagging client catches up
+  // Cap one response at 40 samples (~2.4 KB) so a lagging client catches up
   // over a few polls instead of provoking one long loop-stalling send.
   uint32_t upto = trace_seq;
   if (upto - from > 40) upto = from + 40;
 
-  // Worst-case line: 10-digit seq + 10-digit t + nine 6-char int16 fields
-  // plus separators = 86 chars.  Sized for that, not the typical ~45, so a
+  // Worst-case line: 10-digit seq + 10-digit t + twelve 6-char int16 fields
+  // plus separators = 107 chars.  Sized for that, not the typical ~55, so a
   // batch is never silently shortened by large values.
-  static char csv[40 * 88 + 64];
+  static char csv[40 * 108 + 80];
   int n = 0;
-  n += snprintf(csv + n, sizeof(csv) - n, "seq,t,ax,ay,gx,gy,m1,m2,m3,px,py\n");
-  for (uint32_t q = from; q < upto && n < (int)sizeof(csv) - 48; q++) {
+  n += snprintf(csv + n, sizeof(csv) - n,
+                "seq,t,ax,ay,gx,gy,m1,m2,m3,px,py,gz,yc,pz\n");
+  for (uint32_t q = from; q < upto && n < (int)sizeof(csv) - 108; q++) {
     TraceSample& s = trace_buf[q % TRACE_LEN];
     if (s.seq != q) continue;          // overwritten mid-read: skip honestly
     n += snprintf(csv + n, sizeof(csv) - n,
-                  "%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                  "%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
                   (unsigned long)s.seq, (unsigned long)s.t_ms,
                   s.angX10, s.angY10, s.gyrX10, s.gyrY10,
-                  s.m1, s.m2, s.m3, s.pwmX, s.pwmY);
+                  s.m1, s.m2, s.m3, s.pwmX, s.pwmY,
+                  s.gyrZ10, s.ycmd10, s.pwmZ);
   }
   webServer.send(200, "text/csv", csv);
 }

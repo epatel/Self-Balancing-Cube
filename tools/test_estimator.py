@@ -17,7 +17,7 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / "esp32_cube_enc"
 
 GYRO_LSB_PER_DPS = 131.0   # +/-250 deg/s range (gyroSens 0)
 LOOP_MS = 15
-YAW_RATE_MAX = 90.0
+YAW_RATE_MAX = 25.0        # YAW_TURN_RATE: the rate cap the heading loop uses
 
 
 def old_integrate(gy_raw, loop_ms=LOOP_MS):

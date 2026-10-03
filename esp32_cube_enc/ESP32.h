@@ -248,11 +248,20 @@ extern float batt_comp;      // factor currently applied, for the dashboard
 // --- Yaw rate command -------------------------------------------------
 // Commanded rotation rate about the vertical axis, in degrees/second, used
 // only in vertex mode.  Zero means "hold heading", which is the original
-// behaviour.  Written by an HTTP handler, so volatile; the control loop
-// copies it into yaw_rate_cmd once per iteration.
-#define YAW_RATE_MAX 90.0f     // clamp, degrees/second
+// behaviour.  Written by an HTTP handler, so volatile.  The control loop
+// ramps yaw_rate_cmd toward it at YAW_ACCEL: a step in the rate command is a
+// step in yaw effort on all three wheels at once, which used to take the
+// balance's headroom away and knock the cube over.
+#define YAW_RATE_MAX  45.0f    // slider/API clamp, °/s (was 90: zK2 * 90 is
+                               // three times the whole motor range)
+#define YAW_TURN_RATE 25.0f    // fastest rate the heading loop asks for, °/s
+#define YAW_ACCEL     30.0f    // max change of yaw_rate_cmd, °/s per second
+// Yaw effort added to every motor is capped here, and further limited to the
+// headroom the balancing axes leave on the busiest motor (XYZ_to_threeWay),
+// so spinning can never take drive away from staying upright.
+#define YAW_PWM_MAX   60.0f
 extern volatile float yaw_rate_request;
-extern float yaw_rate_cmd;
+extern float yaw_rate_cmd;     // ramped command actually used by the loop
 
 // --- Heading hold and scripted turns ----------------------------------
 // robot_yaw integrates gyroZ while balancing on a vertex, giving a heading
@@ -283,7 +292,7 @@ extern volatile float yaw_turn_request;  // degrees, relative to current
 // The control loop writes; the /api/trace handler reads.  Single-core-safe
 // by construction: both run from loop(), never concurrently.
 //
-// 336 samples x 24 bytes = 8064 bytes of RAM, a 5 s window - enough to
+// 336 samples x 32 bytes = 10752 bytes of RAM, a 5 s window - enough to
 // cover many missed polls, since the browser accumulates the stream.
 #define TRACE_LEN 336
 struct TraceSample {
@@ -295,10 +304,14 @@ struct TraceSample {
   int16_t  gyrY10;     // gyroYfilt * 10
   int16_t  m1, m2, m3; // wheel speeds, counts/loop
   int16_t  pwmX, pwmY; // last commanded axis efforts (vertex mode)
+  int16_t  gyrZ10;     // yaw rate * 10, deg/s
+  int16_t  ycmd10;     // ramped yaw rate command * 10
+  int16_t  pwmZ;       // yaw effort actually added to each motor
 };
 extern TraceSample trace_buf[TRACE_LEN];
 extern uint32_t trace_seq;           // next sequence number to be written
 extern int16_t trace_pwmX, trace_pwmY;  // captured by the balancing branch
+extern int16_t trace_pwmZ;           // captured by XYZ_to_threeWay()
 void traceRecord();                  // append one sample (functions.cpp)
 
 // --- Balance-point auto-trim ------------------------------------------

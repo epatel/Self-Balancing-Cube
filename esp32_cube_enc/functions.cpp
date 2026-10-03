@@ -209,12 +209,26 @@ void XYZ_to_threeWay(float pwm_X, float pwm_Y, float pwm_Z) {
   // commands into individual motor commands using the inverse mix.
   // 0.5 and 0.866 are cos(60°) and sin(60°); the other factors compensate
   // for this hardware's motor geometry and scale.
-  int16_t m1 = round((0.5 * pwm_X - 0.866 * pwm_Y) / 1.37 + pwm_Z);  
-  int16_t m2 = round((0.5 * pwm_X + 0.866 * pwm_Y) / 1.37 + pwm_Z);
-  int16_t m3 = -pwm_X / 1.37 + pwm_Z;  
-  Motor1_control(m1);
-  Motor2_control(m2);
-  Motor3_control(m3);
+  float m1 = (0.5 * pwm_X - 0.866 * pwm_Y) / 1.37;
+  float m2 = (0.5 * pwm_X + 0.866 * pwm_Y) / 1.37;
+  float m3 = -pwm_X / 1.37;
+
+  // Balance has priority over yaw.  pwm_Z is added to every motor, so it is
+  // limited to what the busiest motor has left after its balancing command
+  // and speed feedback (both as MotorN_control will add them, before battery
+  // compensation scales the result), and to YAW_PWM_MAX overall.  Without
+  // this a yaw command could use up the range the tilt axes need.
+  float lim = 255.0f / batt_comp;
+  float a1 = m1 + motor1_speed, a2 = m2 + motor2_speed, a3 = m3 + motor3_speed;
+  float room_up   = lim - max(a1, max(a2, a3));   // most positive Z allowed
+  float room_down = -lim - min(a1, min(a2, a3));  // most negative Z allowed
+  float z = constrain(pwm_Z, -YAW_PWM_MAX, YAW_PWM_MAX);
+  z = constrain(z, min(0.0f, room_down), max(0.0f, room_up));
+  trace_pwmZ = lroundf(z);
+
+  Motor1_control(lroundf(m1 + z));
+  Motor2_control(lroundf(m2 + z));
+  Motor3_control(lroundf(m3 + z));
 }
 
 void threeWay_to_XY(int in_speed1, int in_speed2, int in_speed3) {
@@ -462,7 +476,7 @@ void calCapture() {
 // Append one sample to the telemetry trace ring.  Called once at the end of
 // every control-loop iteration, balancing or not - a trace that stops when
 // the cube falls would hide exactly the moment worth looking at.  Fixed
-// point keeps the sample at 24 bytes; the dashboard rescales for display.
+// point keeps the sample at 32 bytes; the dashboard rescales for display.
 void traceRecord() {
   TraceSample& s = trace_buf[trace_seq % TRACE_LEN];
   s.t_ms   = (uint32_t)currentT;
@@ -475,6 +489,11 @@ void traceRecord() {
   s.m3 = motor3_speed;
   s.pwmX = trace_pwmX;
   s.pwmY = trace_pwmY;
+  // Yaw: measured rate (computed here, so it is fresh in every mode), the
+  // ramped command, and the effort XYZ_to_threeWay() actually applied.
+  s.gyrZ10 = (int16_t)constrain(GyZ / GYRO_LSB_PER_DPS * 10.0f, -32767.0f, 32767.0f);
+  s.ycmd10 = (int16_t)constrain(yaw_rate_cmd * 10.0f, -32767.0f, 32767.0f);
+  s.pwmZ = trace_pwmZ;
   // seq is written LAST: a reader that sees the new seq is guaranteed the
   // rest of the sample is already in place.
   s.seq = trace_seq;
