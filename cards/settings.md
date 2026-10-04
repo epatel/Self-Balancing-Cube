@@ -32,6 +32,8 @@ Where every configurable value lives, how live gains are stored, and the rules f
 
 `NUM_GAINS` = 15. The dashboard builds its form from `GET /api/gains`, so a row in the table is all the UI needs.
 
+EEPROM map (128 bytes, NVS-backed, survives flashing): 0–27 `OffsetsObj` (ID 96, vertex then edge accel offsets); 32–47 `GainsObj` header (ID 0x6D, count, trimX, trimY); 48 + 4·i gain `i` (bytes 48–107 for 15 gains). Everything else (armed, spin/turn state, guard, battery state, gyro bias, all `#define`s) is not stored. `docs/settings.md` has the per-item table.
+
 ## Rules when touching gains
 
 - **Append only.** `loadGains()` matches saved values to `GAIN_DEFS` by position and reads `min(stored count, NUM_GAINS)`. New rows go at the end with `NUM_GAINS` bumped; no `GAINS_ID` change needed. Reordering or inserting needs a `GAINS_ID` bump (invalidates saved gains).

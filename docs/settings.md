@@ -10,8 +10,46 @@ does. There are three kinds:
 | **Build settings** | `esp32_cube_enc/ESP32.h` and other sources | edit, rebuild, flash | yes (part of the firmware) |
 
 Save writes **all** gains plus the current trim in one go, and is refused while the cube is
-balancing (disarm first). **Restore Defaults** puts the gains back to the values below
-without saving.
+balancing (the button is greyed out then; disarm or lay the cube down). Values typed into
+the form are applied first, so pressing Save alone is enough. The pill at the top of the
+Gains panel is reported by the firmware itself: **ALL GAINS SAVED** (green) only when the
+running gains are the ones stored in flash, **UNSAVED CHANGES** (amber) otherwise. The
+learned trim is not part of that check, since auto-trim changes it continuously.
+**Restore Defaults** puts the gains back to the values below without saving.
+
+## All settings at a glance
+
+✅ = stored in EEPROM (flash) and restored at every boot. ❌ = not stored: build settings
+come with the firmware, runtime state starts fresh at each boot.
+
+| Setting | Kind | EEPROM | Address (bytes) | Written when |
+|---------|------|:------:|-----------------|--------------|
+| Calibration ID (`96` = calibrated) | saved state | ✅ | 0–3 | calibration finishes (edge captured), or Save in the Calibration panel |
+| Vertex pose `acXv`, `acYv`, `acZv` | saved state | ✅ | 4–15 | same |
+| Edge pose `acXe`, `acYe`, `acZe` | saved state | ✅ | 16–27 | same |
+| Gains record ID (`0x6D`) and count | – | ✅ | 32–39 | gains **Save** |
+| Learned trim X, Y | saved state | ✅ | 40–47 | gains **Save** (whatever the trim is at that moment) |
+| `K1` `K2` `K3` `K4` | live gain | ✅ | 48–63 | gains **Save** |
+| `zK2` `zK3` | live gain | ✅ | 64–71 | gains **Save** |
+| `eK1` `eK2` `eK3` `eK4` | live gain | ✅ | 72–87 | gains **Save** |
+| `tK` (auto-trim) | live gain | ✅ | 88–91 | gains **Save** |
+| `zK1` (heading hold) | live gain | ✅ | 92–95 | gains **Save** |
+| `vNom` (battery compensation) | live gain | ✅ | 96–99 | gains **Save** |
+| `autoArm` (demo mode) | live gain | ✅ | 100–103 | gains **Save** |
+| `zK3s` (spin lag) | live gain | ✅ | 104–107 | gains **Save** |
+| Armed / disarmed | runtime | ❌ | – | boots disarmed, unless `autoArm` = 1 |
+| Spin slider rate, turn target, heading | runtime | ❌ | – | reset at boot and whenever the cube falls or is disarmed |
+| Wind-up guard, battery state, gyro bias | runtime | ❌ | – | recomputed at boot (gyro bias measured during the LED-on phase) |
+| Motor pins, `IMU_MOUNT`, `ACC_OFFSET_*` | build | ❌ | – | change in `ESP32.h`, rebuild, flash |
+| `BATT_*` thresholds, `BATT_ADC_PER_VOLT` | build | ❌ | – | same |
+| `YAW_*` spin limits, `TRIM_MAX` | build | ❌ | – | same |
+| Sensor ranges, `loop_time`, `Gyro_amount`, `alpha`, PWM, `TRACE_LEN` | build | ❌ | – | same |
+| Wi-Fi name / password, mDNS name | build | ❌ | – | `web_interface.cpp`, rebuild, flash |
+
+The EEPROM area is 128 bytes (bytes 28–31 and 108–127 unused). Flashing new firmware does
+**not** erase it, so calibration and saved gains survive updates. A gain added to the end of
+the list by a newer firmware starts at its default until the next Save; one removed from
+the end is simply ignored.
 
 ## Live gains
 

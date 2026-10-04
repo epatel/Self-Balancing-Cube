@@ -108,12 +108,30 @@ static_assert(sizeof(OffsetsObj) <= GAINS_EEPROM_ADDR,
 static_assert(GAINS_EEPROM_ADDR + sizeof(GainsObj) <= EEPROM_SIZE,
               "gains do not fit within EEPROM_SIZE");
 
+// The gains a restart would restore: copied at boot (after loading) and after
+// every successful save.  The dashboard shows "unsaved changes" whenever the
+// running gains differ, so a Save that was refused (balancing) or never sent
+// can no longer look like it worked.  Trim is left out on purpose: auto-trim
+// changes it continuously.
+static float stored_v[NUM_GAINS];
+static void snapshotGains() {
+  for (int i = 0; i < NUM_GAINS; i++) stored_v[i] = *GAIN_DEFS[i].ptr;
+}
+static bool gainsUnsaved() {
+  for (int i = 0; i < NUM_GAINS; i++)
+    if (*GAIN_DEFS[i].ptr != stored_v[i]) return true;
+  return false;
+}
+
 // Restore saved gains at startup.  Anything missing, corrupt, or outside
 // the accepted range is ignored so the compiled-in default stays in force.
 void loadGains() {
   GainsObj g;
   EEPROM.get(GAINS_EEPROM_ADDR, g);
-  if (g.ID != GAINS_ID) return;          // nothing saved yet
+  if (g.ID != GAINS_ID) {                // nothing saved yet: defaults stand
+    snapshotGains();
+    return;
+  }
   // Only trust as many gains as the stored record actually contained.  A
   // record written by an older build with fewer gains stays valid; the ones
   // it did not know about keep their defaults.
@@ -133,6 +151,15 @@ void loadGains() {
     trimY = g.trimY;
   Serial.print("Loaded saved gains from EEPROM. Trim X ");
   Serial.print(trimX, 3); Serial.print(" Y "); Serial.println(trimY, 3);
+  // List what is in force, so a Save can be checked from the boot log.
+  // Gains the record did not contain show their compiled-in default.
+  Serial.print("Gains ("); Serial.print(g.count); Serial.print(" stored):");
+  for (int i = 0; i < NUM_GAINS; i++) {
+    Serial.print(' '); Serial.print(GAIN_DEFS[i].name); Serial.print('=');
+    Serial.print(*GAIN_DEFS[i].ptr, 4);
+  }
+  Serial.println();
+  snapshotGains();
 }
 
 // Write the live gains to EEPROM.  Called only from the control loop, in
@@ -147,8 +174,12 @@ void saveGains() {
   g.trimX = trimX;
   g.trimY = trimY;
   EEPROM.put(GAINS_EEPROM_ADDR, g);
-  EEPROM.commit();
-  Serial.println("Saved tuning gains and trim to EEPROM.");
+  if (EEPROM.commit()) {
+    snapshotGains();                     // the dashboard turns "all saved"
+    Serial.println("Saved tuning gains and trim to EEPROM.");
+  } else {
+    Serial.println("ERROR: saving gains to EEPROM failed.");
+  }
 }
 
 // The dashboard page.  This readable literal is the SOURCE, but it is not
@@ -400,11 +431,13 @@ raw</p>
 </div></details>
 
 <details><summary>Gains</summary><div class="bd">
+<div class="st" style="margin:0 0 8px"><span class="p" id="gst">—</span></div>
 <div id="gl" class="gl">Loading…</div>
 <div class="ab">
 <button class="b" id="gapply">Apply</button>
 <button class="b" id="gdef">Restore defaults</button>
 <button class="b w1" id="gsave">Save gains + trim</button></div>
+<p class="note" id="gsn" style="margin:8px 0 0;color:var(--live)"></p>
 <p class="note" id="gm" style="margin:12px 0 0">Changes take effect at once.
 They are lost on restart until you save.</p>
 </div></details>
@@ -477,6 +510,14 @@ function poll(){
   // blocked while balancing, so say that instead when it applies.
   var bal=d.armed&&(d.vertical_vertex||d.vertical_edge)&&d.calibrated
           &&!d.calibrating;
+  // Save state as the FIRMWARE reports it: green only once the running
+  // gains really are in EEPROM, so a refused or skipped save shows.
+  pill($('gst'),d.gains_unsaved?'live':'on',
+       d.gains_unsaved?'UNSAVED CHANGES':'ALL GAINS SAVED');
+  // The firmware refuses to save while balancing; say so up front.
+  $('gsave').disabled=bal;
+  $('gsn').textContent=bal?'Saving is blocked while the cube is balancing — '
+                          +'disarm or lay it down first.':'';
   $('ch').textContent=
    bal?'Balancing. Press DISARM before calibrating.':
    (!d.calibrating?'Idle. Press Start to begin.':
@@ -621,6 +662,7 @@ function flash(b,ok){
 // Sends a command request only; the main control loop acts on it.
 // cmd may carry extra form fields ("turn&deg=90"); label names it for the
 // status line when the raw body would read badly.
+// Resolves to {ok, err} so a caller can show the outcome where it matters.
 function send(cmd,b,label){
  var n=(label||cmd).replace('_',' ');
  // SAFE STOP is never disabled - a hung request must not make it unpressable.
@@ -628,7 +670,7 @@ function send(cmd,b,label){
  if(b&&b.id!='stop'){b.disabled=true;
   setTimeout(function(){b.disabled=false;},3000);}
  say(n+'…');
- fetch('/api/command',{method:'POST',
+ return fetch('/api/command',{method:'POST',
   headers:{'Content-Type':'application/x-www-form-urlencoded'},
   body:'cmd='+cmd})
  .then(function(r){return r.text().then(function(t){
@@ -637,8 +679,10 @@ function send(cmd,b,label){
    var e='';try{e=JSON.parse(t).error||'';}catch(x){}
    say(r.ok?n+' sent':n+' rejected — '+(e||r.status));
    flash(b,r.ok);
+   return {ok:r.ok,err:e||String(r.status)};
   });})
- .catch(function(){say(n+' failed');flash(b,false);});
+ .catch(function(){say(n+' failed');flash(b,false);
+                   return {ok:false,err:'no connection to the cube'};});
 }
 // One binder for every command button, with an optional confirmation.
 //
@@ -688,15 +732,16 @@ function loadG(){
  });
 }
 loadG();
+// Resolves to true when the firmware accepted every field.
 function applyG(btn){
- if(!G)return;
+ if(!G)return Promise.resolve(false);
  // Send every field; the firmware validates each one and rejects the whole
  // request if any is out of range.
  var b=[];
  for(var k in G){b.push(k+'='+$('g_'+k).value);}
  if(btn)btn.disabled=true;
  $('gm').textContent='Applying…';
- fetch('/api/gains',{method:'POST',
+ return fetch('/api/gains',{method:'POST',
   headers:{'Content-Type':'application/x-www-form-urlencoded'},
   body:b.join('&')})
  .then(function(r){return r.json().then(function(j){
@@ -704,8 +749,16 @@ function applyG(btn){
                            :('Rejected — '+j.error);
    flash(btn,r.ok);
    if(r.ok)loadG();                    // re-read what the firmware accepted
+   return r.ok;
   });})
- .catch(function(){$('gm').textContent='Apply failed.';flash(btn,false);});
+ .catch(function(){$('gm').textContent='Apply failed.';flash(btn,false);
+                   return false;});
+}
+// True when a gain field holds something other than what the firmware runs.
+function gainsEdited(){
+ if(!G)return false;
+ for(var k in G){if(+$('g_'+k).value!==+G[k].v.toFixed(4))return true;}
+ return false;
 }
 $('gapply').onclick=function(){applyG(this);};
 // Restore Defaults just fills the form with the firmware's defaults and
@@ -726,7 +779,37 @@ $('gapply').onclick=function(){applyG(this);};
   applyG(this);
  };
 })();
-bind('gsave','gains_save','Save gains and the learned trim to EEPROM?');
+// Save writes what the firmware is RUNNING, so a value typed but not yet
+// applied used to be silently lost (vNom, 2026-10-04).  Apply pending edits
+// first, then save; a rejected edit cancels the save.
+(function(){
+ var b=$('gsave'),txt=b.textContent,t=0;
+ b.onclick=function(){
+  if(!t){
+   b.textContent='Confirm?';b.classList.add('cf');
+   say(gainsEdited()?'Apply the edited gains and save them to EEPROM?'
+                    :'Save gains and the learned trim to EEPROM?');
+   t=setTimeout(function(){t=0;b.textContent=txt;b.classList.remove('cf');},4000);
+   return;
+  }
+  clearTimeout(t);t=0;b.textContent=txt;b.classList.remove('cf');
+  // The outcome stays in the panel; the status line only shows it briefly.
+  // "Sent" is not "saved": the indicator above turns green when the firmware
+  // has written EEPROM.
+  function save(){
+   return send('gains_save',b,'save gains').then(function(r){
+    $('gm').textContent=r.ok?'Saving… the indicator above turns green once '
+                             +'the gains are stored.'
+                            :'NOT saved — '+r.err+'.';
+   });
+  }
+  if(!gainsEdited()){save();return;}
+  applyG(null).then(function(ok){
+   if(ok)save();
+   else $('gm').textContent='NOT saved — fix the rejected gain first.';
+  });
+ };
+})();
 // --- yaw slider -------------------------------------------------------
 // Dragging fires continuously, so the rate is sent at most every 150 ms.
 // The ESP32 serves one client at a time; an unthrottled slider would queue
@@ -829,8 +912,9 @@ void handleApiState() {
   // 640 rather than 512: the raw accelerometer values and cal_result string
   // added when Bluetooth was removed push the worst case past the old size,
   // and snprintf truncates silently - which would emit malformed JSON.
-  // 896 since batt_state, batt_comp, wheel_wind and yaw_guard were added.
-  char json[896];
+  // 960 since batt_state, batt_comp, wheel_wind, yaw_guard and
+  // gains_unsaved were added.
+  char json[960];
   int n = snprintf(json, sizeof(json),
     "{"
       "\"robot_angleX\":%.3f,"
@@ -868,6 +952,7 @@ void handleApiState() {
       "\"yaw_hold\":%s,"
       "\"wheel_wind\":%.0f,"        // smoothed average wheel speed, counts/tick
       "\"yaw_guard\":%s,"           // spin blocked until the wheels slow
+      "\"gains_unsaved\":%s,"       // running gains differ from EEPROM
       "\"cal_result\":\"%s\""
     "}",
     robot_angleX, robot_angleY,
@@ -885,6 +970,7 @@ void handleApiState() {
     AcX, AcY, AcZ, trimX, trimY, yaw_rate_cmd,
     robot_yaw, yaw_hold ? "true" : "false",
     wheel_wind, yaw_guard ? "true" : "false",
+    gainsUnsaved() ? "true" : "false",
     cal_result);
   // Truncated JSON would be malformed, so refuse to send it rather than let
   // the dashboard silently fail to parse.
