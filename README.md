@@ -13,7 +13,8 @@ ESP32, MPU6050, Nidec 24H brushless motors, 500 mAh LiPo battery.
 | [`esp32_cube_enc/`](esp32_cube_enc) | Balancing firmware for the ESP32. Uses the motor encoders, WS2812B status LEDs and a Wi-Fi dashboard. Built with PlatformIO. |
 | [`motors_test/`](motors_test) | Arduino sketch that checks all motors, rotation directions and encoders. |
 | [`battery_test/`](battery_test) | Arduino sketch that holds the motors stopped and prints the battery voltage. Type a multimeter reading to get the correct divider constant for the firmware. |
-| [`tools/`](tools) | Build helper for the dashboard page and checks for the estimator math. |
+| [`docs/settings.md`](docs/settings.md) | Reference for every gain and setting: what it does, default, range and where it lives. |
+| [`tools/`](tools) | Build helper for the dashboard page, accelerometer offset tool, and checks for the estimator math. |
 | [`PCBGerber/`](PCBGerber) | Gerber files for a PCB. |
 
 The older firmware without encoders (`ESP32_cube`) and the Arduino Nano port

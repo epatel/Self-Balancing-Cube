@@ -10,6 +10,7 @@ build. Keep diffs small and local, and match the existing heavily-commented styl
 Load on demand; each card is self-contained.
 
 - [firmware-assessment](cards/firmware-assessment.md) — comparing sketches or branches, choosing which firmware fits a physical build, working out motor order or sensor orientation, or looking for known defects before changing control code
+- [settings](cards/settings.md) — adding, removing or retuning a gain or `#define`, anything touching `GAIN_DEFS`, EEPROM layout or saved gains, or a question like "what does K3 do" / "where is the battery threshold"
 - [development-branch-assessment](cards/development-branch-assessment.md) — deciding which branch or commit to flash, merging or porting from `development`, anything about the Wi-Fi dashboard, arming, PlatformIO build, or why the cube does not hold with default gains
 
 ## Layout
