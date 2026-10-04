@@ -91,13 +91,10 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
   from the dashboard or `a+` over serial — unless the saved gain `autoArm` is 1 (demo
   mode), which arms at the end of `setup()`, before the AP starts so an AP failure still
   disarms.
-- **Nudge to spin** (`nudgeDeg`, 0 = off): a hand twist starts a turn of ±`nudgeDeg`
-  through the normal turn path. Detected by angle, not rate: heading change over the last
-  0.4 s minus what the ~2 s average spin rate explains, above 2.5°. A rate threshold
-  missed a real gentle twist (4.0° but only 3 ticks above 15 °/s), and checking calm on
-  the latest tick blocked it because the twist itself spikes balance effort, so calm is a
-  ~0.5 s average (< 100). Also needs a 2 s quiet time after latching, no turn/spin in
-  progress and `yaw_guard` off. Replayed on all traces: fires only on the real twist.
+- **Nudge to spin** (`nudgeDeg`, 0 = off): a hand twist (>15 °/s for 4 ticks) starts a
+  turn of ±`nudgeDeg` through the normal turn path. Guarded by a 2 s quiet time after
+  latching the vertex, no turn/spin in progress, `yaw_guard` off, and calm balance
+  (|pwm X/Y| < 150). Replayed over all recorded traces: zero false triggers.
 - **Board LED (GPIO2)**: on during the boot gyro measurement, three quick blinks when done;
   afterwards it is the low-battery indicator.
 - **PWM is inverted**: motors are driven with `255 - abs(sp)`, so a duty of 255 is stopped.

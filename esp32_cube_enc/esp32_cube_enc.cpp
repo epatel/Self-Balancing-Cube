@@ -348,11 +348,7 @@ void loop() {
     // fresh latch so placing the cube by hand cannot count as a nudge.
     static bool was_vertex = false;
     static long nudge_quiet_until = 0;
-    static float nudge_hist[NUDGE_WINDOW];   // heading change per tick, degrees
-    static float nudge_sum = 0;              // their sum: degrees over the window
-    static int nudge_pos = 0;
-    static float effort_avg = 0;             // smoothed balance effort
-    static float slow_rate = 0;              // ~2 s average spin rate, °/s
+    static int nudge_count = 0, nudge_sign = 0;
 
     // Vertex mode controls two tilt axes and the common Z rotation axis.
     // "armed" gates both balancing branches; when false the else branch
@@ -372,50 +368,38 @@ void loop() {
       robot_yaw += gyroZ * dt;
 
       // --- Nudge to spin (demo; nudgeDeg in ESP32.h) ---------------------
-      // A twist by hand turns the cube a few degrees within a fraction of a
-      // second, against the spin loop that resists it; balancing jitter
-      // averages out.  So the trigger is the angle turned over the last
-      // NUDGE_WINDOW ticks, not the spin rate (a gentle twist, trace
-      // 2026-10-04: 4.0° in 0.4 s but only 3 ticks above 15°/s; ordinary
-      // balancing where nudges are allowed: at most 1.4°).  It then turns
-      // nudgeDeg that way through the normal turn path, starting from the
-      // hand's average speed.
+      // A twist by hand shows up as a sustained spin rate the cube would
+      // never produce while balancing (traces: under 13°/s, never more than
+      // 2 ticks above 12).  It then turns nudgeDeg in the nudged direction
+      // through the normal turn path, starting from the hand's speed so it
+      // carries on instead of braking first.  Not right after being stood
+      // up, not while a turn or slider spin is running, and not while the
+      // wheels are wound up.
       if (!was_vertex) {
         was_vertex = true;
         nudge_quiet_until = currentT + NUDGE_QUIET_MS;
-        for (int i = 0; i < NUDGE_WINDOW; i++) nudge_hist[i] = 0;
-        nudge_sum = 0;
-        effort_avg = 0;
-        slow_rate = 0;
+        nudge_count = 0;
       }
-      // Rolling sum of the heading change over the last NUDGE_WINDOW ticks.
-      float step_deg = gyroZ * dt;
-      nudge_sum += step_deg - nudge_hist[nudge_pos];
-      nudge_hist[nudge_pos] = step_deg;
-      nudge_pos = (nudge_pos + 1) % NUDGE_WINDOW;
-      // Slow (~2 s) average spin rate.  Subtracting what it would turn over
-      // the window removes steady motion - above all the slow backward turn
-      // while wound-up wheels unwind after a spin - so only a sudden twist
-      // counts (replayed: twist 4.0°, everything else at most 1.2°).
-      slow_rate += (gyroZ - slow_rate) * dt / 2.0f;
-      float nudge_turn = nudge_sum - slow_rate * NUDGE_WINDOW * dt;
-      // Smoothed balance effort (~0.5 s): a hand twist spikes it briefly,
-      // a cube that is really struggling or falling keeps it high.
-      effort_avg += 0.03f * (max(abs(trace_pwmX), abs(trace_pwmY)) - effort_avg);
-
       bool turning = yaw_hold && fabsf(yaw_target - robot_yaw) > 5.0f;
       bool yaw_idle = !turning && !yaw_turn_new && yaw_rate_request == 0
                       && fabsf(yaw_rate_cmd) < 1.0f;
-      if (nudgeDeg > 0 && yaw_idle && effort_avg < NUDGE_CALM && !yaw_guard
-          && currentT >= nudge_quiet_until && fabsf(nudge_turn) > NUDGE_TURN_DEG) {
-        float sgn = nudge_turn > 0 ? 1.0f : -1.0f;
-        yaw_turn_request = sgn * nudgeDeg;
-        yaw_turn_new = true;
-        yaw_rate_cmd = constrain(nudge_sum / (NUDGE_WINDOW * dt),
-                                 -YAW_TURN_RATE, YAW_TURN_RATE);
-        for (int i = 0; i < NUDGE_WINDOW; i++) nudge_hist[i] = 0;
-        nudge_sum = 0;
-        Serial.print("Nudge: turning "); Serial.println(sgn * nudgeDeg, 0);
+      // ...and only while balancing is calm: a cube fighting to stay up (or
+      // falling, which also spins it fast) must not be handed a turn.
+      bool calm = abs(trace_pwmX) < 150 && abs(trace_pwmY) < 150;
+      if (nudgeDeg > 0 && yaw_idle && calm && !yaw_guard
+          && currentT >= nudge_quiet_until) {
+        int sgn = gyroZ > NUDGE_RATE ? 1 : (gyroZ < -NUDGE_RATE ? -1 : 0);
+        nudge_count = (sgn != 0 && sgn == nudge_sign) ? nudge_count + 1 : (sgn != 0 ? 1 : 0);
+        nudge_sign = sgn;
+        if (nudge_count >= NUDGE_SAMPLES) {
+          yaw_turn_request = sgn * nudgeDeg;
+          yaw_turn_new = true;
+          yaw_rate_cmd = constrain(gyroZ, -YAW_TURN_RATE, YAW_TURN_RATE);
+          nudge_count = 0;
+          Serial.print("Nudge: turning "); Serial.println(sgn * nudgeDeg, 0);
+        }
+      } else {
+        nudge_count = 0;
       }
 
       if (yaw_turn_new) {
