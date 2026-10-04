@@ -115,13 +115,6 @@ stood on its vertex or edge, with no phone needed. It is otherwise as safe as a 
 nothing spins until the cube is within 0.4° of a calibrated pose, and a fall, the battery
 cutoff or DISARM still stop it. Set `autoArm` back to `0` and Save to turn it off.
 
-**Nudge to spin:** set the gain `nudgeDeg` to e.g. `360` and Save. While the cube balances on
-its vertex, give it a small twist by hand: it carries on turning that many degrees in the
-direction you twisted it (at up to 20 °/s, so a full turn takes about 20 s), then holds its
-new heading. Nudges are ignored for 2 s after the cube is stood up, during a turn or spin,
-while the wheels are wound up, and while it is struggling to balance. With `autoArm` it
-works without any phone. `0` turns it off.
-
 ## Wi-Fi web interface
 
 The cube hosts its own Wi-Fi access point, so no router or internet is needed. Connect a
@@ -135,8 +128,8 @@ voltage, status and a live trace of the control loop. From it you can:
 - **SAFE STOP / ARM / DISARM** — stop the motors and keep them stopped
 - **Calibrate** — start, capture each pose, save to EEPROM
 - **Tune gains** — edit K1–K4, zK2, zK3, eK1–eK4, the auto-trim rate `tK`, heading hold
-  `zK1`, battery compensation `vNom`, demo mode `autoArm`, the spin-lag scale `zK3s` and
-  nudge-to-spin `nudgeDeg` live, with validation and limits.
+  `zK1`, battery compensation `vNom`, demo mode `autoArm` and the spin-lag scale `zK3s`
+  live, with validation and limits.
   Changes apply immediately but are only written to EEPROM when you press Save. There is
   also a Restore Defaults button.
 - **Yaw** — command a rotation rate about the vertical axis, turn by a number of degrees,

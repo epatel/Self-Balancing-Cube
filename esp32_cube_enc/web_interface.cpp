@@ -96,10 +96,6 @@ const GainDef GAIN_DEFS[] = {
   // Spin lag fix, appended likewise: zK3 scale while a spin is commanded.
   // 1 = unchanged, lower = less lag but faster wheel wind-up.
   {"zK3s", &zK3s, 0.0, 1.0, 1.0 },        // zK3 scale while spinning
-  // Nudge to spin (demo), appended likewise: degrees to turn after a twist
-  // by hand, 0 = off.  Capped at 360 so one nudge stays inside the wind-up
-  // guard's limit.
-  {"nudgeDeg", &nudgeDeg, 0.0, 360.0, 0.0 },  // nudge-to-spin turn
 };
 // Keep the table and the EEPROM record in step at compile time.
 static_assert(sizeof(GAIN_DEFS) / sizeof(GAIN_DEFS[0]) == NUM_GAINS,
