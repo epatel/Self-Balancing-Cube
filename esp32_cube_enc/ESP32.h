@@ -94,9 +94,9 @@
 
 // Tuning gains are saved after the offsets struct.
 #define GAINS_EEPROM_ADDR 32
-#define NUM_GAINS         15   // 10 balancing gains, auto-trim rate, heading hold,
+#define NUM_GAINS         16   // 10 balancing gains, auto-trim rate, heading hold,
                                // battery-compensation nominal voltage, auto-arm,
-                               // zK3 scale while spinning
+                               // zK3 scale while spinning, nudge-to-spin turn
 // Marks a valid saved gain set.  Bump it only if the ORDER of GAIN_DEFS
 // changes or the fixed fields below move - not merely because a gain was
 // added or removed.  The record carries its own count and keeps the
@@ -245,6 +245,18 @@ extern float autoArm;
 // spins faster, so friction winds the wheels up sooner and the wind-up guard
 // ends a long spin earlier.
 extern float zK3s;
+
+// Nudge to spin (demo).  With nudgeDeg > 0, twisting the balancing cube by
+// hand starts a turn of nudgeDeg in that direction (360 = one revolution),
+// which then holds the new heading.  A nudge is a spin rate above NUDGE_RATE
+// for NUDGE_SAMPLES consecutive ticks; balancing alone stayed under 13°/s in
+// every trace.  Ignored for NUDGE_QUIET_MS after the cube is stood up, during
+// a turn or slider spin, and while the wind-up guard is active.  A 360° turn
+// at 20°/s takes ~20 s, inside the ~27 s the guard allows.
+#define NUDGE_RATE      15.0f   // °/s
+#define NUDGE_SAMPLES   4       // control ticks (60 ms)
+#define NUDGE_QUIET_MS  2000
+extern float nudgeDeg;
 
 // --- Web command interface (see web_interface.cpp) ---------------------
 // HTTP handlers never touch the motors.  They only store a request here,

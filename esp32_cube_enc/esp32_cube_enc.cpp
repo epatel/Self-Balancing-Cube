@@ -59,6 +59,7 @@ BattState batt_state = BATT_NONE;
 float vNom = 0;                // battery compensation off until enabled
 float autoArm = 0;             // demo mode: arm at boot when 1
 float zK3s = 1.0f;             // zK3 scale while spinning; 1 = unchanged
+float nudgeDeg = 0;            // nudge-to-spin turn, degrees; 0 = off
 float batt_comp = 1.0f;
 
 volatile uint8_t web_cmd_pending = WEB_CMD_NONE;
@@ -343,6 +344,12 @@ void loop() {
     // branch ramps yaw_rate_cmd toward it.
     float rate_target = constrain(yaw_rate_request, -YAW_RATE_MAX, YAW_RATE_MAX);
 
+    // Nudge-to-spin state (see the vertex branch).  was_vertex notices a
+    // fresh latch so placing the cube by hand cannot count as a nudge.
+    static bool was_vertex = false;
+    static long nudge_quiet_until = 0;
+    static int nudge_count = 0, nudge_sign = 0;
+
     // Vertex mode controls two tilt axes and the common Z rotation axis.
     // "armed" gates both balancing branches; when false the else branch
     // below stops the motors and engages the brake.
@@ -359,6 +366,42 @@ void loop() {
       // is only meaningful in vertex mode, and a heading accumulated while
       // the cube lay on its side would be nonsense to hold on to.
       robot_yaw += gyroZ * dt;
+
+      // --- Nudge to spin (demo; nudgeDeg in ESP32.h) ---------------------
+      // A twist by hand shows up as a sustained spin rate the cube would
+      // never produce while balancing (traces: under 13°/s, never more than
+      // 2 ticks above 12).  It then turns nudgeDeg in the nudged direction
+      // through the normal turn path, starting from the hand's speed so it
+      // carries on instead of braking first.  Not right after being stood
+      // up, not while a turn or slider spin is running, and not while the
+      // wheels are wound up.
+      if (!was_vertex) {
+        was_vertex = true;
+        nudge_quiet_until = currentT + NUDGE_QUIET_MS;
+        nudge_count = 0;
+      }
+      bool turning = yaw_hold && fabsf(yaw_target - robot_yaw) > 5.0f;
+      bool yaw_idle = !turning && !yaw_turn_new && yaw_rate_request == 0
+                      && fabsf(yaw_rate_cmd) < 1.0f;
+      // ...and only while balancing is calm: a cube fighting to stay up (or
+      // falling, which also spins it fast) must not be handed a turn.
+      bool calm = abs(trace_pwmX) < 150 && abs(trace_pwmY) < 150;
+      if (nudgeDeg > 0 && yaw_idle && calm && !yaw_guard
+          && currentT >= nudge_quiet_until) {
+        int sgn = gyroZ > NUDGE_RATE ? 1 : (gyroZ < -NUDGE_RATE ? -1 : 0);
+        nudge_count = (sgn != 0 && sgn == nudge_sign) ? nudge_count + 1 : (sgn != 0 ? 1 : 0);
+        nudge_sign = sgn;
+        if (nudge_count >= NUDGE_SAMPLES) {
+          yaw_turn_request = sgn * nudgeDeg;
+          yaw_turn_new = true;
+          yaw_rate_cmd = constrain(gyroZ, -YAW_TURN_RATE, YAW_TURN_RATE);
+          nudge_count = 0;
+          Serial.print("Nudge: turning "); Serial.println(sgn * nudgeDeg, 0);
+        }
+      } else {
+        nudge_count = 0;
+      }
+
       if (yaw_turn_new) {
         // Turns are RELATIVE to where the cube is pointing right now, so
         // repeated "+90" presses walk it around a square.
@@ -449,6 +492,7 @@ void loop() {
       trace_pwmY = 0;
       trace_pwmZ = 0;
       yaw_rate_cmd = 0;            // no yaw control on an edge
+      was_vertex = false;
     } else {
       // If the cube is not in a recognized balancing pose, stop applying
       // drive and engage the brake.  This protects the motors during setup or
@@ -460,6 +504,7 @@ void loop() {
       trace_pwmX = 0;              // no drive commanded while idle
       trace_pwmY = 0;
       yaw_rate_cmd = 0;            // re-entering vertex mode ramps from rest
+      was_vertex = false;
     }
     // Record this iteration into the telemetry trace, whichever branch ran:
     // the moments around a fall are the ones worth plotting.
