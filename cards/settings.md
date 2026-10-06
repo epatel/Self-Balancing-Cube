@@ -46,15 +46,17 @@ EEPROM map (128 bytes, NVS-backed, survives flashing): 0–27 `OffsetsObj` (ID 9
 
 ## Build settings that are measured per cube
 
-Do not "clean up" these to round or upstream values; each was measured on the user's cube.
+Two physical cubes share one source. These values live per cube in `esp32_cube_enc/cube_config.h` (`#if CUBE == N` blocks, `-DCUBE=N` from `[env:cubeN]` in `platformio.ini`, `default_envs = cube1`). Do not "clean up" them to round or upstream values, and never copy one cube's measured value into the other's block.
 
-| Setting | Value | Measured how |
-|---------|-------|--------------|
-| motor pin groups | 1 = D4 group, 2 = D5, 3 = D15 | motors_test + edge/vertex balance tests |
-| `IMU_MOUNT` | 1 (upright holder) | raw chip X read −1 g on the vertex |
-| `ACC_OFFSET_X/Y/Z` | −77, −85, 6255 | three face readings, `tools/accel_offsets.py` |
-| `BATT_ADC_PER_VOLT` | 225 | 12.0 V pack read raw 2700, `battery_test` |
-| `upload_speed` | 115200 | 460800 fails on this board (serial noise) |
+| Setting | Cube1 | Cube2 | Measured how |
+|---------|-------|-------|--------------|
+| motor pin groups | 1 = D4, 2 = D5, 3 = D15 | same, **unverified** | motors_test + edge/vertex balance tests |
+| `IMU_MOUNT` | 1 (upright holder) | 1 | raw chip X read −1 g on the vertex |
+| `ACC_OFFSET_X/Y/Z` | −77, −85, 6255 | 575, −61, 1261 | three face readings, `tools/accel_offsets.py --cube N` (N = build running) |
+| `BATT_ADC_PER_VOLT` | 225 | **placeholder** 225 | Cube1: 12.0 V read raw 2700. Cube2: pending (12.48 V pack, different divider) |
+| Wi-Fi / mDNS | `Cube1-Control` / `cube1` | `Cube2-Control` / `cube2` | — |
+
+`upload_speed` 115200 is shared: 460800 fails on Cube1's board (serial noise); Cube2's board (ESP32-D0WD-V3 rev 3, normal crystal) has not been tried faster.
 
 ## Build settings chosen from traces
 

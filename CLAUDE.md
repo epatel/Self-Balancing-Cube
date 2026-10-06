@@ -36,8 +36,8 @@ are gone from the branches; they are at the tag `legacy` (67ed329).
 ## Build, flash, test
 
 ```
-pio run                          # build
-pio run -t upload                # flash
+pio run -e cube1                 # build for Cube1 (also the default without -e)
+pio run -e cube2 -t upload       # build and flash Cube2
 pio device monitor               # 115200 baud
 python tools/test_estimator.py   # after touching angle_calc() or the heading loop
 ```
@@ -104,15 +104,21 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
   interrupts, and the ISRs are not in IRAM, so counts are lost across a flash write.
 - **EEPROM layout**: calibration offsets at address 0 (`ID == 96`), gains and learned trim
   at address 32 (`GAINS_ID`). Changing `OffsetsObj` invalidates a calibrated cube.
+- **Two physical cubes, one source.** Motor pins, `IMU_MOUNT`, `ACC_OFFSET_*`,
+  `BATT_ADC_PER_VOLT`, the Wi-Fi name and mDNS name are per cube in
+  `esp32_cube_enc/cube_config.h`, selected by `pio run -e cube1|cube2` (`-DCUBE=N`).
+  Always flash with the right `-e`; the boot log prints "Firmware built for CubeN" and
+  the AP is `CubeN-Control`. Never move a measured value from one cube's block to the
+  other's.
 - **Sensor frame**: `angle_calc()` subtracts `ACC_OFFSET_*` (chip axes) and then rotates
   readings into the 2024-holder frame (`IMU_MOUNT`) before anything else uses them, so
-  `AcX..GyZ` are never raw chip axes. This cube: `IMU_MOUNT 1` (board upright), chip Z
-  accelerometer offset +6255 (0.38 g). A big accel offset looks like a tilt — don't
-  "fix" it with a rotation, which also turns the gyro. Measure with
-  `tools/accel_offsets.py` (three face readings).
+  `AcX..GyZ` are never raw chip axes. Both cubes: `IMU_MOUNT 1` (board upright). Cube1's
+  chip Z has a +6255 (0.38 g) offset; Cube2's offsets are small. A big accel offset looks
+  like a tilt — don't "fix" it with a rotation, which also turns the gyro. Measure with
+  `tools/accel_offsets.py --cube N` (three face readings; N = the build that was running).
 - **Motor numbering** is set by the control geometry: motor 3 alone balances the edge;
-  swapping motors 1 and 2 reverses the vertex Y axis. This cube: 1 = D4, 2 = D5, 3 = D15
-  pin groups (upstream 1 = D4, 2 = D15, 3 = D5).
+  swapping motors 1 and 2 reverses the vertex Y axis. Cube1: 1 = D4, 2 = D5, 3 = D15 pin
+  groups (upstream 1 = D4, 2 = D15, 3 = D5). Cube2: assumed the same, not yet verified.
 - **Yaw shares the motors with balance**: `pwm_Z` is added to every motor, so
   `XYZ_to_threeWay()` limits it to the headroom left after the tilt axes and speed
   feedback, capped at `YAW_PWM_MAX`. Rate commands are ramped (`YAW_ACCEL`) toward
@@ -135,7 +141,8 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
 - **Battery protection** lives in `battCheck()` / `battIndicate()` with thresholds in
   `ESP32.h` (`BATT_*`): warn below 10.5 V, latched cutoff (disarm) below 9.9 V for 4
   checks, re-arm only above 10.8 V, "no battery" below 6 V because USB back-feeds the rail
-  to ~4 V. `BATT_ADC_PER_VOLT` (225) is hand-measured per board — use `battery_test`.
+  to ~4 V. `BATT_ADC_PER_VOLT` is hand-measured per cube (Cube1 225; Cube2 still a placeholder)
+  — use `battery_test` or the boot "Battery … V" line against a multimeter.
   Upstream had `/ 204` and only a buzzer between 8 and 9.5 V.
 - **`INT_LED` (GPIO2)** is the low-battery indicator; this cube has no buzzer.
 - **Battery compensation**: gain `vNom` (0 = off) makes `battCheck()` set `batt_comp =

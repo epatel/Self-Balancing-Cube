@@ -40,11 +40,11 @@ come with the firmware, runtime state starts fresh at each boot.
 | Armed / disarmed | runtime | ❌ | – | boots disarmed, unless `autoArm` = 1 |
 | Spin slider rate, turn target, heading | runtime | ❌ | – | reset at boot and whenever the cube falls or is disarmed |
 | Wind-up guard, battery state, gyro bias | runtime | ❌ | – | recomputed at boot (gyro bias measured during the LED-on phase) |
-| Motor pins, `IMU_MOUNT`, `ACC_OFFSET_*` | build | ❌ | – | change in `ESP32.h`, rebuild, flash |
-| `BATT_*` thresholds, `BATT_ADC_PER_VOLT` | build | ❌ | – | same |
+| Motor pins, `IMU_MOUNT`, `ACC_OFFSET_*`, `BATT_ADC_PER_VOLT`, Wi-Fi and mDNS name | build, **per cube** | ❌ | – | change the cube's block in `cube_config.h`, rebuild with `-e cubeN`, flash |
+| `BATT_*` thresholds | build | ❌ | – | change in `ESP32.h`, rebuild, flash |
 | `YAW_*` spin limits, `TRIM_MAX` | build | ❌ | – | same |
 | Sensor ranges, `loop_time`, `Gyro_amount`, `alpha`, PWM, `TRACE_LEN` | build | ❌ | – | same |
-| Wi-Fi name / password, mDNS name | build | ❌ | – | `web_interface.cpp`, rebuild, flash |
+| Wi-Fi password | build | ❌ | – | `web_interface.cpp`, rebuild, flash |
 
 The EEPROM area is 128 bytes (bytes 28–31 and 108–127 unused). Flashing new firmware does
 **not** erase it, so calibration and saved gains survive updates. A gain added to the end of
@@ -99,22 +99,29 @@ Values are those of the firmware as built; ranges are what the dashboard accepts
 
 ## Build settings (`esp32_cube_enc/ESP32.h` unless noted)
 
-Change, rebuild (`pio run`) and flash (`pio run -t upload`).
+Change, rebuild and flash **for the right cube**: `pio run -e cube1 -t upload` or
+`pio run -e cube2 -t upload` (without `-e`, Cube1 is built).
 
-### This cube's hardware (measured or wired, specific to one build)
+### Per cube (`esp32_cube_enc/cube_config.h`, measured or wired on each build)
 
-| Setting | Value | Meaning |
-|---------|-------|---------|
-| `DIR1/PWM1/ENC1_*` | 4 / 32 / 35, 33 | Motor 1 pin group (wheel C on this cube) |
-| `DIR2/PWM2/ENC2_*` | 5 / 18 / 16, 17 | Motor 2 pin group (wheel B) |
-| `DIR3/PWM3/ENC3_*` | 15 / 25 / 13, 14 | Motor 3 pin group (wheel A, the one that balances the edge) |
-| `BRAKE`, `BUZZER`, `VBAT`, `INT_LED`, `LED_PIN` | 26, 27, 34, 2, 19 | Brake (LOW = braking), buzzer, battery sense, board LED, WS2812 data |
-| `IMU_MOUNT` | 1 | 0 = 2024 sensor holder; 1 = original upright holder (axes rotated in firmware) |
-| `ACC_OFFSET_X/Y/Z` | −77, −85, 6255 | Accelerometer zero offsets on the chip's axes; measure with `tools/accel_offsets.py` |
-| `BATT_ADC_PER_VOLT` | 225 | Battery divider constant; measure with the `battery_test` sketch |
+| Setting | Cube1 | Cube2 | Meaning |
+|---------|-------|-------|---------|
+| `DIR1/PWM1/ENC1_*` | 4 / 32 / 35, 33 | same (unverified) | Motor 1 pin group (wheel C on Cube1) |
+| `DIR2/PWM2/ENC2_*` | 5 / 18 / 16, 17 | same (unverified) | Motor 2 pin group (wheel B) |
+| `DIR3/PWM3/ENC3_*` | 15 / 25 / 13, 14 | same (unverified) | Motor 3 pin group (wheel A, the one that balances the edge) |
+| `IMU_MOUNT` | 1 | 1 | 0 = 2024 sensor holder; 1 = original upright holder (axes rotated in firmware) |
+| `ACC_OFFSET_X/Y/Z` | −77, −85, 6255 | 575, −61, 1261 | Accelerometer zero offsets on the chip's axes; `tools/accel_offsets.py --cube N` |
+| `BATT_ADC_PER_VOLT` | 225 | placeholder (225) | Battery divider constant; `battery_test` or the boot "Battery … V" line |
+| Wi-Fi / mDNS name | `Cube1-Control` / `cube1` | `Cube2-Control` / `cube2` | Access point and `http://cubeN.local` |
 
 Motor numbering follows the control geometry: motor 3 alone balances the edge, and if the
 vertex throws the cube sideways, motors 1 and 2 are swapped.
+
+### Shared hardware pins (`ESP32.h`)
+
+| Setting | Value | Meaning |
+|---------|-------|---------|
+| `BRAKE`, `BUZZER`, `VBAT`, `INT_LED`, `LED_PIN` | 26, 27, 34, 2, 19 | Brake (LOW = braking), buzzer, battery sense, board LED, WS2812 data |
 
 ### Battery protection
 
@@ -166,8 +173,10 @@ These are not settings, but are worth knowing when the cube "won't start":
 
 | Setting | Where | Value |
 |---------|-------|-------|
-| `WIFI_NAME` / `WIFI_PASSWORD` | web_interface.cpp | `Cube-Control` / change before use (at least 8 characters) |
-| `MDNS_NAME` | web_interface.cpp | `cube` → `http://cube.local` |
+| `WIFI_NAME` | cube_config.h (`CUBE_WIFI_NAME`) | `Cube1-Control` / `Cube2-Control` |
+| `WIFI_PASSWORD` | web_interface.cpp | change before use (at least 8 characters) |
+| `MDNS_NAME` | cube_config.h (`CUBE_MDNS_NAME`) | `cube1` / `cube2` → `http://cube1.local` |
+| `[env:cube1]`, `[env:cube2]` | platformio.ini | `-DCUBE=1` / `-DCUBE=2`; `default_envs = cube1` |
 | `platform` | platformio.ini | pioarduino 55.03.311 (later releases need PlatformIO Core 6.2+) |
 | `upload_speed` / `monitor_speed` | platformio.ini | 115200 / 115200 |
 

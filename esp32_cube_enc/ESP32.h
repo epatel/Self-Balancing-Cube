@@ -8,37 +8,15 @@
 #include <Arduino.h>
 #include <FastLED.h>
 
+// Motor pins, sensor mount, accelerometer offsets and the battery constant
+// differ per physical cube: see cube_config.h (selected by pio run -e cubeN).
+#include "cube_config.h"
+
 #define BUZZER      27
 #define VBAT        34
 #define INT_LED     2
 
 #define BRAKE       26       // Motor-driver brake/enable input
-
-// Motor numbering follows the control geometry, not the wiring.  Motor 3 is
-// the wheel on the firmware's X axis (the one that balances the edge alone);
-// motors 1 and 2 share the Y axis, and swapping them reverses it.
-// On this cube motor 1 is the D4 pin group, motor 2 D5 and motor 3 D15;
-// upstream's wiring had 1 = D4, 2 = D15, 3 = D5.  Verified 2026-10-03:
-// motors_test showed each group's encoder belongs to its motor, the edge
-// balanced on motor 3, and with 1 and 2 the other way round the vertex
-// threw the cube over sideways.
-#define DIR1        4
-#define ENC1_1      35
-#define ENC1_2      33
-#define PWM1        32
-#define PWM1_CH     1
-
-#define DIR2        5
-#define ENC2_1      16
-#define ENC2_2      17
-#define PWM2        18
-#define PWM2_CH     2
-
-#define DIR3        15
-#define ENC3_1      13
-#define ENC3_2      14
-#define PWM3        25
-#define PWM3_CH     0
 
 #define TIMER_BIT   8        // 8-bit PWM: values range from 0 to 255
 #define BASE_FREQ   20000    // 20 kHz PWM, above the audible motor range
@@ -52,31 +30,8 @@
 #define accSens 0            // 0 = ±2 g, 1 = ±4 g, 2 = ±8 g, 3 = ±16 g
 #define gyroSens 0           // 0 = ±250°/s, 1 = ±500°/s, 2 = ±1000°/s, 3 = ±2000°/s
 
-// How the MPU6050 board is mounted.  The firmware works in the frame of
-// upstream's 2024 sensor holder: chip Z points down through the balancing
-// vertex, chip X runs (seen from above) along motor 3's wheel.
-//   0 = 2024 holder, readings used as-is.
-//   1 = original holder, board upright: chip X points down and chip Z points
-//       horizontally toward motor 3's wheel.  Readings are rotated into the
-//       2024 frame as they are read (X = -Z, Y = Y, Z = X), so everything
-//       downstream - pose detection, calibration, the dashboard's raw
-//       values - sees the 2024 frame.
-// This cube (2026-10-03): on the vertex the raw chip axes read X -16290,
-// Y ~100, so it uses mount 1.
-#define IMU_MOUNT 1
-
-// Accelerometer zero offsets, in raw counts on the CHIP's own axes, removed
-// before the IMU_MOUNT rotation.  Some MPU6050s read far from zero on one
-// axis; a large offset looks like the sensor being tilted, but correcting it
-// with a rotation also turns the gyro and leaks the cube's spin into the
-// balance axes.  Measure with tools/accel_offsets.py: lay the cube still on
-// three faces that meet at a corner and give it the dashboard's raw values.
-// This cube (2026-10-03): chip Z reads +6255 (0.38 g) too high; with that
-// removed the faces come out 90.0° apart and the board's real tilt is 1.6°,
-// small enough for the calibration capture to absorb.
-#define ACC_OFFSET_X    -77
-#define ACC_OFFSET_Y    -85
-#define ACC_OFFSET_Z   6255
+// IMU_MOUNT and ACC_OFFSET_* (sensor mount and accelerometer offsets) are
+// per cube: see cube_config.h.
 
 // Raw gyro counts per degree/second, derived from the range selected above
 // (131 at ±250°/s, halving with each step up).  Every place that converts a
@@ -198,10 +153,8 @@ extern int32_t motors_speed_Z;
 extern long currentT, previousT_1, previousT_2;
 
 // --- Battery monitoring (see battCheck() in functions.cpp) ---------------
-// analogRead(VBAT) counts per battery volt.  Board-specific: measure the pack
-// and derive it with battery_test/.  225 was measured on this cube (12.0 V
-// pack read raw 2700); upstream's 204 read 13.2 V here.
-#define BATT_ADC_PER_VOLT  225.0f
+// BATT_ADC_PER_VOLT (analogRead counts per battery volt) depends on each
+// cube's resistor divider: see cube_config.h.
 // Thresholds for a 3S LiPo, in volts at the pack.
 #define BATT_PRESENT_V      6.0f   // below this there is no pack: on USB power
                                    // alone the battery rail still reads ~4 V

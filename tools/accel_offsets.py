@@ -6,11 +6,14 @@ faces work well) and note the dashboard's raw X Y Z line for each.  Lying
 still, each reading is gravity plus the same constant offset; gravity on
 three perpendicular faces is three equal, mutually perpendicular vectors.
 Fitting that model gives the offset, which is converted back to the chip's
-own axes and added to the ACC_OFFSET_* values already in ESP32.h.
+own axes and added to the ACC_OFFSET_* values the readings were taken with.
 
-    python tools/accel_offsets.py  X,Y,Z  X,Y,Z  X,Y,Z
+    python tools/accel_offsets.py [--cube N]  X,Y,Z  X,Y,Z  X,Y,Z
 
-Needs numpy.  Reads IMU_MOUNT and ACC_OFFSET_* from esp32_cube_enc/ESP32.h.
+--cube names the build that was RUNNING when the readings were taken (its
+corrections are already in the dashboard values), default 1.  The printed
+values go into that physical cube's block in esp32_cube_enc/cube_config.h.
+Needs numpy.
 """
 import pathlib
 import re
@@ -18,7 +21,25 @@ import sys
 
 import numpy as np
 
-HDR = pathlib.Path(__file__).resolve().parent.parent / "esp32_cube_enc" / "ESP32.h"
+HDR = (pathlib.Path(__file__).resolve().parent.parent
+       / "esp32_cube_enc" / "cube_config.h")
+
+
+def cube_block(text, cube):
+    """The lines of cube_config.h that apply when CUBE == cube."""
+    out, inside = [], False
+    for line in text.splitlines():
+        s = line.strip()
+        if re.match(r"#(el)?if\s+CUBE\s*==\s*%d\b" % cube, s):
+            inside = True
+            continue
+        if inside and re.match(r"#(elif|else|endif)\b", s):
+            break
+        if inside:
+            out.append(line)
+    if not out:
+        raise SystemExit("no block for CUBE == %d in %s" % (cube, HDR))
+    return "\n".join(out)
 
 
 def define(name, text):
@@ -59,10 +80,15 @@ def angles(v):
 
 
 def main(args):
+    cube = 1
+    if len(args) >= 2 and args[0] == "--cube":
+        cube = int(args[1])
+        args = args[2:]
     if len(args) != 3:
         raise SystemExit(__doc__)
     readings = [np.array([float(x) for x in a.split(",")]) for a in args]
-    text = HDR.read_text(encoding="utf-8")
+    text = cube_block(HDR.read_text(encoding="utf-8"), cube)
+    print("readings taken with the cube%d build" % cube)
     mount = define("IMU_MOUNT", text)
     current = np.array([define("ACC_OFFSET_" + k, text) for k in "XYZ"])
 
@@ -79,7 +105,7 @@ def main(args):
           % np.degrees(np.arccos(abs(up[2]))))
     new = current + to_chip(o, mount)
     print("\nresidual offset, dashboard frame: %s" % np.round(o).astype(int))
-    print("new values for ESP32.h (chip axes):")
+    print("new values for this cube's block in cube_config.h (chip axes):")
     for k, v in zip("XYZ", new):
         print("  #define ACC_OFFSET_%s  %d" % (k, round(v)))
 

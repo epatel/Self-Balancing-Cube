@@ -25,18 +25,28 @@ The older firmware without encoders (`ESP32_cube`) and the Arduino Nano port
 > The sensor orientation in `esp32_cube_enc` differs from the original cube. Upstream's
 > advice is to reprint one part, or print the redesigned cube:
 > https://www.thingiverse.com/thing:6695891. Alternatively, keep the original sensor holder
-> and set `IMU_MOUNT 1` in `esp32_cube_enc/ESP32.h`.
+> and set `IMU_MOUNT 1` for your cube in `esp32_cube_enc/cube_config.h`.
 >
 > If the cube reads far from upright at its vertex balance point (raw X or Y on the
 > dashboard well away from 0), check the accelerometer before assuming the sensor is
-> tilted: some MPU6050s have a large zero offset on one axis. Lay the cube still on its
-> three wheel faces, note the raw `X Y Z` for each, and run
-> `python tools/accel_offsets.py X,Y,Z X,Y,Z X,Y,Z`. It prints `ACC_OFFSET_*` values for
-> `ESP32.h` and the board's real tilt. Recalibrate after changing them.
+> tilted: every MPU6050 has its own zero offsets, and some are large. Lay the cube still on
+> its three wheel faces, note the raw `X Y Z` for each, and run
+> `python tools/accel_offsets.py --cube N X,Y,Z X,Y,Z X,Y,Z` (N = the build the cube was
+> running). It prints `ACC_OFFSET_*` values for the cube's block in `cube_config.h` and the
+> board's real tilt. Recalibrate after changing them.
 >
 > Motor numbering must also match the control geometry: motor 3 is the wheel that balances
 > the edge by itself, and if the vertex throws the cube over sideways, swap the pins of
-> motors 1 and 2 in `ESP32.h`.
+> motors 1 and 2 in the cube's block of `cube_config.h`.
+
+### More than one cube
+
+Each physical cube has its own block in `esp32_cube_enc/cube_config.h` (motor pins, sensor
+mount, accelerometer offsets, battery divider constant, Wi-Fi name), and its own PlatformIO
+environment. This repository has two: `cube1` and `cube2`. Always name the cube when
+flashing; the boot log prints "Firmware built for CubeN" and each cube's network is
+`CubeN-Control`. To add a cube, copy a block, give it the next number, add an
+`[env:cubeN]` to `platformio.ini`, and measure its values as described above.
 
 ## Hardware
 
@@ -63,9 +73,10 @@ The red connections in the schematic are the encoder lines. They **must be conne
 ### Balancing firmware (PlatformIO)
 
 ```
-pio run                 # build
-pio run -t upload       # flash
-pio device monitor      # serial monitor, 115200 baud
+pio run -e cube1                # build for Cube1 (the default without -e)
+pio run -e cube1 -t upload      # build and flash Cube1
+pio run -e cube2 -t upload      # build and flash Cube2
+pio device monitor              # serial monitor, 115200 baud
 ```
 
 - The firmware uses the arduino-esp32 **core 3.x** PWM API (`ledcAttach`), provided by the
@@ -119,8 +130,9 @@ cutoff or DISARM still stop it. Set `autoArm` back to `0` and Save to turn it of
 ## Wi-Fi web interface
 
 The cube hosts its own Wi-Fi access point, so no router or internet is needed. Connect a
-phone to the **Cube-Control** network and open **http://192.168.4.1** (phones usually offer
-it automatically as a sign-in page; laptops can also use `http://cube.local`).
+phone to the cube's network, **Cube1-Control** or **Cube2-Control**, and open
+**http://192.168.4.1** (phones usually offer it automatically as a sign-in page; laptops
+can also use `http://cube1.local` / `http://cube2.local`).
 
 The dashboard shows live tilt on an attitude target (the outer ring is the ±7° angle at
 which balancing disengages), the three motor speeds, raw accelerometer values, battery
@@ -199,11 +211,12 @@ to the voltage your gains were tuned at (e.g. `11.5`) and every motor command is
 discharge; the battery pill then shows the factor, e.g. `10.80 V ×1.06`. `0` (the default)
 turns it off. It cannot add torque a flat pack does not have.
 
-The voltage divider constant `BATT_ADC_PER_VOLT` in `esp32_cube_enc/ESP32.h` (225) depends
-on your board's resistors and must be adjusted by measuring your actual battery voltage.
-The `battery_test` sketch does this: run it with the battery connected, type your
-multimeter reading, and it prints the constant to use. (225 was measured on one cube;
-upstream used 204.)
+The voltage divider constant `BATT_ADC_PER_VOLT` (per cube, in
+`esp32_cube_enc/cube_config.h`) depends on the cube's resistors and must be adjusted by
+measuring the actual battery voltage. The `battery_test` sketch does this: run it with the
+battery connected, type your multimeter reading, and it prints the constant to use.
+Alternatively compare the "Battery … V" line in the boot log with a multimeter: new
+constant = old constant × reported ÷ measured. (Cube1: 225; upstream used 204.)
 
 ## Troubleshooting
 

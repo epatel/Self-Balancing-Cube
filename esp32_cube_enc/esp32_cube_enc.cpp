@@ -125,6 +125,8 @@ void setup() {
   // Start the two serial interfaces: USB serial is useful for diagnostics,
   // while Bluetooth is used to tune gains and run calibration.
   Serial.begin(115200);
+  // Which cube this firmware was built for (cube_config.h, pio run -e).
+  Serial.println("Firmware built for " CUBE_NAME);
   // If any LEDC attach failed, the PWM pins are still floating and the
   // motors are NOT safe: report it loudly and keep the brake engaged.
   if (!pwm_ok)

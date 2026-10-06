@@ -24,11 +24,13 @@
 
 // Access-point credentials.  Change the password before real use;
 // WPA2 requires it to be at least 8 characters long.
-const char* WIFI_NAME = "Cube-Control";
+// The network name is per cube (cube_config.h), so a phone cannot end up on
+// the wrong cube when more than one is powered.
+const char* WIFI_NAME = CUBE_WIFI_NAME;
 const char* WIFI_PASSWORD = "poop1234";
-// mDNS name, so a laptop can use http://cube.local instead of the IP.
+// mDNS name, so a laptop can use http://cube1.local etc. instead of the IP.
 // Phones mostly ignore mDNS; the captive portal below is what serves them.
-const char* MDNS_NAME = "cube";
+const char* MDNS_NAME = CUBE_MDNS_NAME;
 
 // HTTP server on the standard port, so plain http://<ip> works.
 WebServer webServer(80);
