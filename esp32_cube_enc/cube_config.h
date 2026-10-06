@@ -83,9 +83,10 @@
 #define CUBE_WIFI_NAME  "Cube2-Control"
 #define CUBE_MDNS_NAME  "cube2"            // http://cube2.local
 
-// ASSUMED the same wiring as Cube1 until verified with motors_test and an
-// edge and vertex balance test (edge must balance on motor 3; if the vertex
-// throws the cube sideways, swap the motor 1 and 2 groups).
+// Same wiring as Cube1.  motors_test 2026-10-06: motors 1/2/3 drive wheels
+// C/B/A as on Cube1, each group's encoder belongs to its motor (speeds
+// 505/495/500).  Still to confirm with balance tests: the edge must balance
+// on motor 3; if the vertex throws the cube sideways, swap groups 1 and 2.
 #define DIR1        4
 #define ENC1_1      35
 #define ENC1_2      33
@@ -115,9 +116,9 @@
 #define ACC_OFFSET_Y    -61
 #define ACC_OFFSET_Z   1261
 
-// PLACEHOLDER (Cube1's value): Cube2 has a different divider.  Measure it
-// before relying on the battery warning and cutoff.
-#define BATT_ADC_PER_VOLT  225.0f
+// 2026-10-06: with Cube1's 225 the boot log read 14.96 V for a pack
+// measured at 12.34 V (multimeter), so 225 x 14.96 / 12.34 = 272.8.
+#define BATT_ADC_PER_VOLT  273.0f
 
 #else
 #error "Unknown CUBE number: add its block to cube_config.h"

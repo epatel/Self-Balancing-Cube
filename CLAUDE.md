@@ -118,7 +118,7 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
   `tools/accel_offsets.py --cube N` (three face readings; N = the build that was running).
 - **Motor numbering** is set by the control geometry: motor 3 alone balances the edge;
   swapping motors 1 and 2 reverses the vertex Y axis. Cube1: 1 = D4, 2 = D5, 3 = D15 pin
-  groups (upstream 1 = D4, 2 = D15, 3 = D5). Cube2: assumed the same, not yet verified.
+  groups (upstream 1 = D4, 2 = D15, 3 = D5). Cube2: the same (motors_test OK 2026-10-06; balance tests pending).
 - **Yaw shares the motors with balance**: `pwm_Z` is added to every motor, so
   `XYZ_to_threeWay()` limits it to the headroom left after the tilt axes and speed
   feedback, capped at `YAW_PWM_MAX`. Rate commands are ramped (`YAW_ACCEL`) toward
@@ -141,7 +141,7 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
 - **Battery protection** lives in `battCheck()` / `battIndicate()` with thresholds in
   `ESP32.h` (`BATT_*`): warn below 10.5 V, latched cutoff (disarm) below 9.9 V for 4
   checks, re-arm only above 10.8 V, "no battery" below 6 V because USB back-feeds the rail
-  to ~4 V. `BATT_ADC_PER_VOLT` is hand-measured per cube (Cube1 225; Cube2 still a placeholder)
+  to ~4 V. `BATT_ADC_PER_VOLT` is hand-measured per cube (Cube1 225, Cube2 273)
   — use `battery_test` or the boot "Battery … V" line against a multimeter.
   Upstream had `/ 204` and only a buzzer between 8 and 9.5 V.
 - **`INT_LED` (GPIO2)** is the low-battery indicator; this cube has no buzzer.

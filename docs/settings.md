@@ -106,12 +106,12 @@ Change, rebuild and flash **for the right cube**: `pio run -e cube1 -t upload` o
 
 | Setting | Cube1 | Cube2 | Meaning |
 |---------|-------|-------|---------|
-| `DIR1/PWM1/ENC1_*` | 4 / 32 / 35, 33 | same (unverified) | Motor 1 pin group (wheel C on Cube1) |
-| `DIR2/PWM2/ENC2_*` | 5 / 18 / 16, 17 | same (unverified) | Motor 2 pin group (wheel B) |
-| `DIR3/PWM3/ENC3_*` | 15 / 25 / 13, 14 | same (unverified) | Motor 3 pin group (wheel A, the one that balances the edge) |
+| `DIR1/PWM1/ENC1_*` | 4 / 32 / 35, 33 | same (motors_test) | Motor 1 pin group (wheel C on Cube1) |
+| `DIR2/PWM2/ENC2_*` | 5 / 18 / 16, 17 | same (motors_test) | Motor 2 pin group (wheel B) |
+| `DIR3/PWM3/ENC3_*` | 15 / 25 / 13, 14 | same (motors_test) | Motor 3 pin group (wheel A, the one that balances the edge) |
 | `IMU_MOUNT` | 1 | 1 | 0 = 2024 sensor holder; 1 = original upright holder (axes rotated in firmware) |
 | `ACC_OFFSET_X/Y/Z` | −77, −85, 6255 | 575, −61, 1261 | Accelerometer zero offsets on the chip's axes; `tools/accel_offsets.py --cube N` |
-| `BATT_ADC_PER_VOLT` | 225 | placeholder (225) | Battery divider constant; `battery_test` or the boot "Battery … V" line |
+| `BATT_ADC_PER_VOLT` | 225 | 273 | Battery divider constant; `battery_test` or the boot "Battery … V" line |
 | Wi-Fi / mDNS name | `Cube1-Control` / `cube1` | `Cube2-Control` / `cube2` | Access point and `http://cubeN.local` |
 
 Motor numbering follows the control geometry: motor 3 alone balances the edge, and if the

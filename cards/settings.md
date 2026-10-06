@@ -50,10 +50,10 @@ Two physical cubes share one source. These values live per cube in `esp32_cube_e
 
 | Setting | Cube1 | Cube2 | Measured how |
 |---------|-------|-------|--------------|
-| motor pin groups | 1 = D4, 2 = D5, 3 = D15 | same, **unverified** | motors_test + edge/vertex balance tests |
+| motor pin groups | 1 = D4, 2 = D5, 3 = D15 | same (motors_test OK; balance tests pending) | motors_test + edge/vertex balance tests |
 | `IMU_MOUNT` | 1 (upright holder) | 1 | raw chip X read −1 g on the vertex |
 | `ACC_OFFSET_X/Y/Z` | −77, −85, 6255 | 575, −61, 1261 | three face readings, `tools/accel_offsets.py --cube N` (N = build running) |
-| `BATT_ADC_PER_VOLT` | 225 | **placeholder** 225 | Cube1: 12.0 V read raw 2700. Cube2: pending (12.48 V pack, different divider) |
+| `BATT_ADC_PER_VOLT` | 225 | 273 | Cube1: 12.0 V read raw 2700. Cube2: 225 read 14.96 V for a 12.34 V pack |
 | Wi-Fi / mDNS | `Cube1-Control` / `cube1` | `Cube2-Control` / `cube2` | — |
 
 `upload_speed` 115200 is shared: 460800 fails on Cube1's board (serial noise); Cube2's board (ESP32-D0WD-V3 rev 3, normal crystal) has not been tried faster.
