@@ -24,7 +24,7 @@ Where every configurable value lives, how live gains are stored, and the rules f
 | 7 | `eK2` | 31 | 0–200 | edge: tilt rate |
 | 8 | `eK3` | 2.5 | 0–50 | edge: `motor3_speed` |
 | 9 | `eK4` | 0.014 | 0–1 | edge: integrated |
-| 10 | `tK` | 0 | −0.5–0.5 | auto-trim rate; negative flips sign |
+| 10 | `tK` | 0 | −0.5–0.5 | auto-trim rate. Keep 0: sign is right but it is far too fast after a bump and sticks at the ±3° clamp (traces 2026-10-07); a clamped trim is not a sign error |
 | 11 | `zK1` | 1.0 | 0–10 | heading hold, °/s per ° error |
 | 12 | `vNom` | 0 | 0–13 | battery compensation, 0 = off |
 | 13 | `autoArm` | 0 | 0–1 | ≥ 0.5 arms at end of `setup()` |

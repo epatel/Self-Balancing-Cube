@@ -87,7 +87,7 @@ Values are those of the firmware as built; ranges are what the dashboard accepts
 
 | Gain | Default | Range | What it does |
 |------|---------|-------|--------------|
-| `tK` | 0 | −0.5–0.5 | **Auto-trim** rate. Learns the true balance point from steady wheel speed and shifts the setpoint (at most ±3°). 0 = off; the dashboard's Auto-trim button sets 0.005. If the trim runs to ±3° and balancing gets worse, use a negative value. The learned trim is stored by Save. |
+| `tK` | 0 | −0.5–0.5 | **Auto-trim** rate. Learns the true balance point from steady wheel speed and shifts the setpoint (at most ±3°). 0 = off; the dashboard's Auto-trim button sets 0.005. **Leave it off for now and use "Set balance point here" instead**: its direction is right, but it is far too fast after a bump (0.75–1.5 °/s at wheel speeds of 150–300), runs the trim to the ±3° limit within seconds, makes the cube lean for half a minute, and leaves the trim stuck there to be stored by Save. A trim at the limit is not a sign problem; do not use a negative value. |
 | `vNom` | 0 | 0–13 | **Battery compensation.** 0 = off. Otherwise the pack voltage the gains were tuned at (about 11.5 V): motor commands are scaled by `vNom ÷ battery voltage` (limited to ×0.90–×1.25) so the cube behaves the same as the pack drains. |
 | `autoArm` | 0 | 0–1 | **Demo mode.** 1 = arm automatically at the end of boot, so the cube balances when stood up without a phone. Takes effect at the next boot after Save. |
 | `eTrim` | 0 | −3–3 | **Edge balance point**, degrees. Set by "Set balance point here" while balancing on the edge (or by auto-trim there); normally not typed by hand. |

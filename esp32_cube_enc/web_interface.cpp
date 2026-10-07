@@ -70,10 +70,11 @@ const GainDef GAIN_DEFS[] = {
   {"eK3", &eK3, 0.0,  50.0,   2.5  },  // edge: motor 3 speed
   {"eK4", &eK4, 0.0,   1.0,   0.014},  // edge: motor speed
   // Auto-trim adaptation rate.  Default 0 = off, so the controller behaves
-  // exactly as before until the user opts in.  The limit is small on
-  // purpose: this is meant to track slow drift, not fight the balancing.
-  // Negative values are allowed so the sign can be flipped from the web
-  // interface if this hardware's encoder polarity is inverted.
+  // exactly as before until the user opts in.  Leave it off for now: the
+  // sign is right, but even 0.005 moves the trim 0.75-1.5°/s after a bump
+  // and leaves it stuck at the clamp (see the note in loop()).  The negative
+  // range is kept only so saved records stay valid; a trim at the clamp is
+  // not a polarity problem.
   {"tK",  &tK, -0.5,   0.5,   0.0  },  // balance-point auto-trim rate
   // APPENDED, not inserted: loadGains() matches saved values to this table
   // by POSITION, so a new row may only go on the end or every gain after it
@@ -554,8 +555,9 @@ function poll(){
   var tk=G&&G.tK?G.tK.v:0;
   $('ttog').textContent='Auto-trim: '+(tk!=0?'ON':'OFF');
   $('tnote').textContent=tk!=0
-   ?'Active (tK '+tk+'). Values settle as the cube balances.'
-   :'Off. Toggle on to learn the balance point while balancing.';
+   ?'Auto-trim ACTIVE (tK '+tk+'). Caution: after a bump it can run the '
+    +'trim to its limit and make the cube lean. Prefer the button below.'
+   :'Auto-trim is off (recommended). Use "Set balance point here".';
   // Reflect the firmware's actual yaw command unless the user is dragging.
   if(!dragging)$('yv').textContent=d.yaw_rate.toFixed(0)+' °/s';
   // Heading only exists in vertex mode; say so rather than showing a stale
@@ -872,8 +874,9 @@ bind('tcap','trim_capture','Use the current settled pose as the balance point?',
 // Auto-trim toggle: writes tK through the normal gains endpoint so the
 // firmware's range check still applies.  OFF stashes the current rate and
 // ON restores it, so a rate tuned in the Gains panel round-trips.
-// ponytail: 0.005 first-use default is a conservative guess - tune tK in
-// the Gains panel if it learns too slowly, the toggle remembers it.
+// 0.005 is the first-use default.  It is NOT conservative: after a bump it
+// runs the trim to its limit within seconds (see the note in loop()), so
+// prefer "Set balance point here" until auto-trim is reworked.
 $('ttog').onclick=function(){
  if(!G)return;
  var b=this,on=G.tK.v!=0,v=0;

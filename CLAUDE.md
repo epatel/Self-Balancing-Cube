@@ -126,6 +126,12 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
   with it), only when `settledForTrim()`. The take-over windows in `angle_calc()` are
   centred on the trim. Vertex uses `trimX/trimY` (record fields); the edge has its own
   `eTrim` (a gain) — they used to share `trimX`.
+- **Auto-trim (`tK`) is a trap as written; keep it 0.** Its sign is correct (same
+  direction as the K4 integral), but the rate is ∝ wheel speed: 0.75–1.5 °/s at speeds
+  of 150–300, so any catch or bump rails the trim at ±`TRIM_MAX` in seconds, the cube
+  leans to follow it for ~30 s, and the value freezes when the wheels stop and gets
+  saved. Both cubes had `tK` 0.005 saved; Cube2's stored trim Y was −3.00°. Do not
+  "fix" a clamped trim with a negative `tK`.
 - **Yaw shares the motors with balance**: `pwm_Z` is added to every motor, so
   `XYZ_to_threeWay()` limits it to the headroom left after the tilt axes and speed
   feedback, capped at `YAW_PWM_MAX`. Rate commands are ramped (`YAW_ACCEL`) toward

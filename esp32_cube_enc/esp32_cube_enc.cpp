@@ -420,17 +420,25 @@ void loop() {
       // Learn the true balance point.  Sustained wheel speed in one
       // direction means the setpoint is on the wrong side of the real
       // balance point, so move the trim AGAINST that speed until the wheels
-      // settle.  The rate is tiny (tK is small and this runs every 15 ms) so
-      // it tracks only the slow drift, never the fast balancing dynamics.
-      // tK = 0 freezes adaptation but a trim already learned (or restored
-      // from EEPROM) still applies - that is the "learn once, then hold"
-      // workflow.  Reset trim gives back exactly the original controller.
+      // settle.  tK = 0 freezes adaptation but a trim already set (or
+      // restored from EEPROM) still applies.  Reset trim gives back exactly
+      // the original controller.
       //
-      // Sign: subtracting is correct for this controller's convention, where
-      // +K3 * speed_X is the stabilising wheel-unwind term.  If the trim on
-      // your hardware runs to the +/-TRIM_MAX clamp and balancing gets worse
-      // instead of better, the encoder polarity is inverted - set tK
-      // negative rather than editing this line.
+      // KNOWN PROBLEMS (traces 2026-10-07; leave tK at 0 and use "Set balance
+      // point here" instead until this is reworked):
+      //  * The sign is right - it is the same direction as the K4 integral,
+      //    and in small signal the trim goes ~89% of the way to the true
+      //    balance point each time the cube settles.  A trim found at the
+      //    +/-TRIM_MAX clamp is NOT a sign error; do not make tK negative.
+      //  * The rate is not small.  It is proportional to wheel speed: at
+      //    tK = 0.005 a speed of 10 moves the trim 0.05°/s, but after a catch
+      //    or bump (speeds 150-300) it moves 0.75-1.5°/s and reaches the
+      //    clamp in a few seconds.  The cube then leans to follow it for the
+      //    ~30 s the wheels take to unwind (measured tilt tracks the trim
+      //    within ~0.3° throughout).
+      //  * It freezes wherever it is once the wheels stop, the K4 integral
+      //    hides the error, and Save stores it.  A saved trim at the clamp
+      //    makes the next stand-up start degrees off target at full effort.
       if (tK != 0) {
         trimX = constrain(trimX - tK * speed_X * loop_time / 1000.0,
                           -TRIM_MAX, TRIM_MAX);

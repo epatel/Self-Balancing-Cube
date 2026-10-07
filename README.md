@@ -171,7 +171,10 @@ voltage, status and a live trace of the control loop. From it you can:
   point. Vertex and edge each keep their own. Do it once per cube, and again after
   changing its hardware or recalibrating.
 - **Auto-trim** — let the cube learn its balance point continuously from sustained wheel
-  speed instead (`tK`, off by default). The trim is saved with the gains.
+  speed instead (`tK`, off by default). **Leave it off for now**: it adapts far too fast
+  after a bump, runs the trim to its ±3° limit within seconds, makes the cube lean for
+  half a minute, and the stuck value is then stored by Save. Use *Set balance point
+  here* instead.
 
 Bluetooth has been removed: it was 40% of the firmware image, the web interface replaced
 everything it did, and Espressif rates a simultaneous SoftAP + Bluetooth Classic as
