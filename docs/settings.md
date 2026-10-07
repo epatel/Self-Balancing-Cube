@@ -28,7 +28,7 @@ come with the firmware, runtime state starts fresh at each boot.
 | Vertex pose `acXv`, `acYv`, `acZv` | saved state | ✅ | 4–15 | same |
 | Edge pose `acXe`, `acYe`, `acZe` | saved state | ✅ | 16–27 | same |
 | Gains record ID (`0x6D`) and count | – | ✅ | 32–39 | gains **Save** |
-| Learned trim X, Y | saved state | ✅ | 40–47 | gains **Save** (whatever the trim is at that moment) |
+| Balance point (trim) X, Y, vertex | saved state | ✅ | 40–47 | gains **Save** (whatever the trim is at that moment) |
 | `K1` `K2` `K3` `K4` | live gain | ✅ | 48–63 | gains **Save** |
 | `zK2` `zK3` | live gain | ✅ | 64–71 | gains **Save** |
 | `eK1` `eK2` `eK3` `eK4` | live gain | ✅ | 72–87 | gains **Save** |
@@ -37,6 +37,7 @@ come with the firmware, runtime state starts fresh at each boot.
 | `vNom` (battery compensation) | live gain | ✅ | 96–99 | gains **Save** |
 | `autoArm` (demo mode) | live gain | ✅ | 100–103 | gains **Save** |
 | `zK3s` (spin lag) | live gain | ✅ | 104–107 | gains **Save** |
+| `eTrim` (edge balance point) | live gain | ✅ | 108–111 | gains **Save** |
 | Armed / disarmed | runtime | ❌ | – | boots disarmed, unless `autoArm` = 1 |
 | Spin slider rate, turn target, heading | runtime | ❌ | – | reset at boot and whenever the cube falls or is disarmed |
 | Wind-up guard, battery state, gyro bias | runtime | ❌ | – | recomputed at boot (gyro bias measured during the LED-on phase) |
@@ -46,7 +47,7 @@ come with the firmware, runtime state starts fresh at each boot.
 | Sensor ranges, `loop_time`, `Gyro_amount`, `alpha`, PWM, `TRACE_LEN` | build | ❌ | – | same |
 | Wi-Fi password | build | ❌ | – | `web_interface.cpp`, rebuild, flash |
 
-The EEPROM area is 128 bytes (bytes 28–31 and 108–127 unused). Flashing new firmware does
+The EEPROM area is 128 bytes (bytes 28–31 and 112–127 unused). Flashing new firmware does
 **not** erase it, so calibration and saved gains survive updates. A gain added to the end of
 the list by a newer firmware starts at its default until the next Save; one removed from
 the end is simply ignored.
@@ -89,13 +90,14 @@ Values are those of the firmware as built; ranges are what the dashboard accepts
 | `tK` | 0 | −0.5–0.5 | **Auto-trim** rate. Learns the true balance point from steady wheel speed and shifts the setpoint (at most ±3°). 0 = off; the dashboard's Auto-trim button sets 0.005. If the trim runs to ±3° and balancing gets worse, use a negative value. The learned trim is stored by Save. |
 | `vNom` | 0 | 0–13 | **Battery compensation.** 0 = off. Otherwise the pack voltage the gains were tuned at (about 11.5 V): motor commands are scaled by `vNom ÷ battery voltage` (limited to ×0.90–×1.25) so the cube behaves the same as the pack drains. |
 | `autoArm` | 0 | 0–1 | **Demo mode.** 1 = arm automatically at the end of boot, so the cube balances when stood up without a phone. Takes effect at the next boot after Save. |
+| `eTrim` | 0 | −3–3 | **Edge balance point**, degrees. Set by "Set balance point here" while balancing on the edge (or by auto-trim there); normally not typed by hand. |
 
 ## Saved state
 
 | What | Set by | Notes |
 |------|--------|-------|
 | Calibration (vertex and edge poses) | Calibration panel: Start, Capture vertex, Capture edge | Saved automatically after the edge capture. Redo after changing the sensor mount, `ACC_OFFSET_*` or `IMU_MOUNT`. |
-| Learned trim (X, Y) | auto-trim while balancing; **Reset trim** clears it | Stored with the gains when you press Save, and printed at boot ("Trim X … Y …"). |
+| Balance point (trim) | **Set balance point here** when the cube stands settled; or auto-trim; **Reset trim** clears it | The true balance point relative to the calibrated pose; the cube takes over from there. Vertex: X and Y; edge: `eTrim`. Stored with the gains when you press Save, and printed at boot ("Trim X … Y …"). |
 
 ## Build settings (`esp32_cube_enc/ESP32.h` unless noted)
 
@@ -183,6 +185,7 @@ These are not settings, but are worth knowing when the cube "won't start":
 ## Commands (not settings, for completeness)
 
 Dashboard buttons and `POST /api/command` with `cmd=`: `stop`, `disarm`, `arm`,
-`cal_start`, `cal_capture`, `cal_save`, `gains_save`, `trim_reset`, `yaw` (`rate=`),
+`cal_start`, `cal_capture`, `cal_save`, `gains_save`, `trim_reset`, `trim_capture`,
+`yaw` (`rate=`),
 `turn` (`deg=`), `yaw_free`. Over USB serial at 115200: `a+` / `a-` arm and disarm,
 `c+` start calibration, `c-` capture the current pose.

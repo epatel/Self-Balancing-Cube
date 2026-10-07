@@ -49,9 +49,9 @@
 
 // Tuning gains are saved after the offsets struct.
 #define GAINS_EEPROM_ADDR 32
-#define NUM_GAINS         15   // 10 balancing gains, auto-trim rate, heading hold,
+#define NUM_GAINS         16   // 10 balancing gains, auto-trim rate, heading hold,
                                // battery-compensation nominal voltage, auto-arm,
-                               // zK3 scale while spinning
+                               // zK3 scale while spinning, edge trim
 // Marks a valid saved gain set.  Bump it only if the ORDER of GAIN_DEFS
 // changes or the fixed fields below move - not merely because a gain was
 // added or removed.  The record carries its own count and keeps the
@@ -211,6 +211,7 @@ extern float zK3s;
 #define WEB_CMD_CAL_SAVE    6  // write the offsets to EEPROM
 #define WEB_CMD_GAINS_SAVE  7  // write the current gains to EEPROM
 #define WEB_CMD_TRIM_RESET  8  // clear the learned balance-point trim
+#define WEB_CMD_TRIM_CAPTURE 9 // use the settled pose as the balance point
 // --- Yaw rate command -------------------------------------------------
 // Commanded rotation rate about the vertical axis, in degrees/second, used
 // only in vertex mode.  Zero means "hold heading", which is the original
@@ -310,6 +311,28 @@ void traceRecord();                  // append one sample (functions.cpp)
 #define TRIM_MAX 3.0f          // clamp, degrees - a runaway trim cannot
                                // command more than a small lean
 extern float trimX, trimY;
+// The edge has its own balance point.  It used to share trimX with the
+// vertex, so a trim learned or set in one pose shifted the other.  Stored as
+// a gain (eTrim) because the saved record's fixed fields only hold X and Y.
+extern float eTrim;
+
+// --- Setting the balance point from the settled pose ------------------
+// The calibrated pose is captured by hand and is typically 0.5-1° from
+// the true balance point.  Balancing takes over within 0.4° of it, so it
+// starts off-balance and winds the wheels up hard (traces 2026-10-07:
+// wheels to +/-280, 35 s to unwind).  Once the cube stands settled, its
+// averaged tilt IS the balance point: WEB_CMD_TRIM_CAPTURE stores it as
+// the trim, and the take-over window is centred on the trim.
+//
+// "Settled" = balancing for SETTLE_TICKS with low smoothed effort and wheel
+// speed and no spin (settled calm in the traces: effort ~10, wheels < 20).
+#define SETTLE_TICKS   333      // control ticks since the pose latched (~5 s)
+#define SETTLE_EFFORT  40.0f    // smoothed max |pwm X/Y|, of 255
+#define SETTLE_WHEEL   40.0f    // smoothed fastest wheel, counts per tick
+extern float settle_angX, settle_angY;   // ~1 s average tilt, degrees
+extern float settle_effort, settle_wheel;
+extern uint32_t settle_ticks;
+bool settledForTrim();
 // volatile because it is written by an HTTP handler and read by the loop.
 extern volatile uint8_t web_cmd_pending;
 

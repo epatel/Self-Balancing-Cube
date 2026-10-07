@@ -209,7 +209,11 @@ void angle_calc(float dt) {
 
   // Recognize a stable upright vertex or edge.  The tight angle thresholds
   // prevent balancing from starting while the cube is being placed.
-  if (abs(AcX) < 2000 && abs(Acc_angleX) < 0.4 && abs(Acc_angleY) < 0.4 && !vertical_vertex && !vertical_edge) {
+  //
+  // The windows are centred on the balance point (trim), not on the
+  // calibrated pose: taking over 0.5-1° off balance made the controller
+  // wind the wheels up against the hand still steadying the cube.
+  if (abs(AcX) < 2000 && abs(Acc_angleX - trimX) < 0.4 && abs(Acc_angleY - trimY) < 0.4 && !vertical_vertex && !vertical_edge) {
     robot_angleX = Acc_angleX;
     robot_angleY = Acc_angleY;
     vertical_vertex = true;
@@ -219,7 +223,7 @@ void angle_calc(float dt) {
     robot_yaw = 0;
     yaw_target = 0;
     yaw_hold = false;
-  } else if (abs(AcX) > 7000 && abs(AcX) < 10000 && abs(Acc_angleX) < 0.3 && !vertical_vertex && !vertical_edge) {
+  } else if (abs(AcX) > 7000 && abs(AcX) < 10000 && abs(Acc_angleX - eTrim) < 0.3 && !vertical_vertex && !vertical_edge) {
     robot_angleX = Acc_angleX;
     robot_angleY = Acc_angleY;
     vertical_edge = true;
@@ -534,6 +538,14 @@ void traceRecord() {
   // rest of the sample is already in place.
   s.seq = trace_seq;
   trace_seq++;
+}
+
+// True when the cube has been balancing calmly long enough that its averaged
+// tilt is its balance point (see SETTLE_* in ESP32.h).
+bool settledForTrim() {
+  return balancingActive() && settle_ticks >= SETTLE_TICKS
+         && settle_effort < SETTLE_EFFORT && settle_wheel < SETTLE_WHEEL
+         && fabsf(yaw_rate_cmd) < 1.0f && !yaw_guard;
 }
 
 // True while the control loop is actively driving the motors to balance.

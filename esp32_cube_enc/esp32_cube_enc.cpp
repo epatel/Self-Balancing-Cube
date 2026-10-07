@@ -79,6 +79,11 @@ int16_t motor3_speed;
 volatile float yaw_rate_request = 0;
 float yaw_rate_cmd = 0;
 float trimX = 0, trimY = 0;
+float eTrim = 0;               // edge balance point (see ESP32.h)
+// Settled-pose tracking for "set balance point here" (see ESP32.h).
+float settle_angX = 0, settle_angY = 0;
+float settle_effort = 255, settle_wheel = 255;
+uint32_t settle_ticks = 0;
 float wheel_wind = 0;          // wind-up guard (see ESP32.h)
 bool yaw_guard = false;
 
@@ -305,6 +310,36 @@ void loop() {
         // Forget the learned balance point and start again from zero.
         trimX = 0;
         trimY = 0;
+        eTrim = 0;
+        break;
+      case WEB_CMD_TRIM_CAPTURE:
+        // Use the settled pose as the balance point (see ESP32.h).  The
+        // HTTP handler checks settledForTrim() too; re-checked here because
+        // the cube may have been disturbed in between.
+        //
+        // Bumpless: the integral term was holding the cube at this pose
+        // against the old trim.  Moving the trim alone would step the
+        // effort by K1 * change, so the integral moves with it and
+        // K1 * (angle - trim) + K4 * integral stays what it was.
+        if (settledForTrim()) {
+          if (vertical_vertex) {
+            float nx = constrain(settle_angX, -TRIM_MAX, TRIM_MAX);
+            float ny = constrain(settle_angY, -TRIM_MAX, TRIM_MAX);
+            if (K4 > 0) {
+              motors_speed_X += lroundf(K1 * (nx - trimX) / K4);
+              motors_speed_Y += lroundf(K1 * (ny - trimY) / K4);
+            }
+            trimX = nx;
+            trimY = ny;
+            Serial.print("Balance point set (vertex): X "); Serial.print(trimX, 2);
+            Serial.print(" Y "); Serial.println(trimY, 2);
+          } else if (vertical_edge) {
+            float nx = constrain(settle_angX, -TRIM_MAX, TRIM_MAX);
+            if (eK4 > 0) motors_speed_X += lroundf(eK1 * (nx - eTrim) / eK4);
+            eTrim = nx;
+            Serial.print("Balance point set (edge): "); Serial.println(eTrim, 2);
+          }
+        }
         break;
       // Calibration commands run the same functions as the Bluetooth "c+"
       // and "c-" commands.  Each is refused while the cube is actively
@@ -430,6 +465,16 @@ void loop() {
       XYZ_to_threeWay(-pwm_X, pwm_Y, -pwm_Z);
       trace_pwmX = pwm_X;          // captured for the telemetry trace
       trace_pwmY = pwm_Y;
+
+      // Settled-pose tracking (see ESP32.h): ~1 s average tilt, and smoothed
+      // effort and wheel speed to tell when the cube really is settled.
+      if (settle_ticks == 0) { settle_angX = robot_angleX; settle_angY = robot_angleY; }
+      settle_ticks++;
+      settle_angX += (robot_angleX - settle_angX) * dt;
+      settle_angY += (robot_angleY - settle_angY) * dt;
+      settle_effort += 0.03f * (max(abs(pwm_X), abs(pwm_Y)) - settle_effort);
+      settle_wheel += 0.03f * (max(abs(motor1_speed), max(abs(motor2_speed),
+                               abs(motor3_speed))) - settle_wheel);
     } else if (armed && vertical_edge && calibrated && !calibrating) {
       // In edge mode, only motor 3 is used to correct the detected tilt.
       digitalWrite(BRAKE, HIGH);
@@ -439,11 +484,11 @@ void loop() {
       // Same balance-point learning as vertex mode, but edge mode measures
       // its wheel speed from motor 3 alone (see the eK3 term below).
       if (tK != 0) {
-        trimX = constrain(trimX - tK * motor3_speed * loop_time / 1000.0,
+        eTrim = constrain(eTrim - tK * motor3_speed * loop_time / 1000.0,
                           -TRIM_MAX, TRIM_MAX);
       }
 
-      int pwm_X = constrain(eK1 * (robot_angleX - trimX) + eK2 * gyroXfilt + eK3 * motor3_speed + eK4 * motors_speed_X, -255, 255);
+      int pwm_X = constrain(eK1 * (robot_angleX - eTrim) + eK2 * gyroXfilt + eK3 * motor3_speed + eK4 * motors_speed_X, -255, 255);
 
       motors_speed_X += motor3_speed / 5;
       Motor3_control(pwm_X);
@@ -451,6 +496,13 @@ void loop() {
       trace_pwmY = 0;
       trace_pwmZ = 0;
       yaw_rate_cmd = 0;            // no yaw control on an edge
+
+      // Settled-pose tracking, as in vertex mode (X only on an edge).
+      if (settle_ticks == 0) settle_angX = robot_angleX;
+      settle_ticks++;
+      settle_angX += (robot_angleX - settle_angX) * dt;
+      settle_effort += 0.03f * (abs(pwm_X) - settle_effort);
+      settle_wheel += 0.03f * (abs(motor3_speed) - settle_wheel);
     } else {
       // If the cube is not in a recognized balancing pose, stop applying
       // drive and engage the brake.  This protects the motors during setup or
@@ -462,6 +514,9 @@ void loop() {
       trace_pwmX = 0;              // no drive commanded while idle
       trace_pwmY = 0;
       yaw_rate_cmd = 0;            // re-entering vertex mode ramps from rest
+      settle_ticks = 0;            // not balancing: nothing is settled
+      settle_effort = 255;
+      settle_wheel = 255;
     }
     // Record this iteration into the telemetry trace, whichever branch ran:
     // the moments around a fall are the ones worth plotting.

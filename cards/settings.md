@@ -7,7 +7,7 @@ Where every configurable value lives, how live gains are stored, and the rules f
 | Kind | Source | Changed by | Persisted |
 |------|--------|------------|-----------|
 | Live gains | `GAIN_DEFS` table, `web_interface.cpp` | dashboard Apply (RAM), Save (`gains_save`) | EEPROM at `GAINS_EEPROM_ADDR` 32, magic `GAINS_ID` 0x6D |
-| Saved state | `OffsetsObj offsets` (calibration), `trimX/trimY` | calibration commands; auto-trim; `trim_reset` | offsets at EEPROM 0 (`ID == 96`); trim inside the gains record |
+| Saved state | `OffsetsObj offsets` (calibration), `trimX/trimY` (vertex balance point) | calibration commands; `trim_capture`; auto-trim; `trim_reset` | offsets at EEPROM 0 (`ID == 96`); trim inside the gains record |
 | Build settings | `#define`s in `ESP32.h`, a few globals in `esp32_cube_enc.cpp`, `platformio.ini` | edit + rebuild + flash | firmware |
 
 ## Live gains (`GAIN_DEFS`, order matters)
@@ -29,16 +29,17 @@ Where every configurable value lives, how live gains are stored, and the rules f
 | 12 | `vNom` | 0 | 0–13 | battery compensation, 0 = off |
 | 13 | `autoArm` | 0 | 0–1 | ≥ 0.5 arms at end of `setup()` |
 | 14 | `zK3s` | 1.0 | 0–1 | `zK3` scale while a spin is commanded |
+| 15 | `eTrim` | 0 | −3–3 | edge balance point (deg); edge law and edge take-over window |
 
-`NUM_GAINS` = 15. The dashboard builds its form from `GET /api/gains`, so a row in the table is all the UI needs.
+`NUM_GAINS` = 16. The dashboard builds its form from `GET /api/gains`, so a row in the table is all the UI needs.
 
-EEPROM map (128 bytes, NVS-backed, survives flashing): 0–27 `OffsetsObj` (ID 96, vertex then edge accel offsets); 32–47 `GainsObj` header (ID 0x6D, count, trimX, trimY); 48 + 4·i gain `i` (bytes 48–107 for 15 gains). Everything else (armed, spin/turn state, guard, battery state, gyro bias, all `#define`s) is not stored. `docs/settings.md` has the per-item table.
+EEPROM map (128 bytes, NVS-backed, survives flashing): 0–27 `OffsetsObj` (ID 96, vertex then edge accel offsets); 32–47 `GainsObj` header (ID 0x6D, count, trimX, trimY); 48 + 4·i gain `i` (bytes 48–111 for 16 gains). Everything else (armed, spin/turn state, guard, battery state, gyro bias, all `#define`s) is not stored. `docs/settings.md` has the per-item table.
 
 ## Rules when touching gains
 
 - **Append only.** `loadGains()` matches saved values to `GAIN_DEFS` by position and reads `min(stored count, NUM_GAINS)`. New rows go at the end with `NUM_GAINS` bumped; no `GAINS_ID` change needed. Reordering or inserting needs a `GAINS_ID` bump (invalidates saved gains).
 - Removing the last row is safe: a longer saved record is truncated on load (nudge-to-spin's `nudgeDeg` was removed this way on 2026-10-04).
-- `static_assert`s check `NUM_GAINS` against the table and that `GainsObj` fits in `EEPROM_SIZE` (128; with 15 gains the record ends at byte 108).
+- `static_assert`s check `NUM_GAINS` against the table and that `GainsObj` fits in `EEPROM_SIZE` (128; with 16 gains the record ends at byte 112).
 - `tools/test_estimator.py::test_gain_table_appends_only` pins the first 12 names and checks `NUM_GAINS` against the table.
 - Out-of-range or NaN saved values are skipped on load, leaving the default.
 - Save is refused while `balancingActive()` (NVS write stalls the loop, encoder ISRs not in IRAM).

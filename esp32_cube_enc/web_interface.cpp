@@ -98,6 +98,10 @@ const GainDef GAIN_DEFS[] = {
   // Spin lag fix, appended likewise: zK3 scale while a spin is commanded.
   // 1 = unchanged, lower = less lag but faster wheel wind-up.
   {"zK3s", &zK3s, 0.0, 1.0, 1.0 },        // zK3 scale while spinning
+  // Edge balance point in degrees, appended likewise.  Set by "Set balance
+  // point here" on an edge (or by auto-trim there); the vertex uses the
+  // record's trimX / trimY fields.
+  {"eTrim", &eTrim, -3.0, 3.0, 0.0 },      // edge balance point
 };
 // Keep the table and the EEPROM record in step at compile time.
 static_assert(sizeof(GAIN_DEFS) / sizeof(GAIN_DEFS[0]) == NUM_GAINS,
@@ -113,16 +117,21 @@ static_assert(GAINS_EEPROM_ADDR + sizeof(GainsObj) <= EEPROM_SIZE,
 // The gains a restart would restore: copied at boot (after loading) and after
 // every successful save.  The dashboard shows "unsaved changes" whenever the
 // running gains differ, so a Save that was refused (balancing) or never sent
-// can no longer look like it worked.  Trim is left out on purpose: auto-trim
-// changes it continuously.
+// can no longer look like it worked.  The balance point (trim) counts too,
+// with a 0.05° tolerance so auto-trim's constant small steps do not flag it
+// until it has really moved.
 static float stored_v[NUM_GAINS];
+static float stored_trimX, stored_trimY;
 static void snapshotGains() {
   for (int i = 0; i < NUM_GAINS; i++) stored_v[i] = *GAIN_DEFS[i].ptr;
+  stored_trimX = trimX;
+  stored_trimY = trimY;
 }
 static bool gainsUnsaved() {
   for (int i = 0; i < NUM_GAINS; i++)
-    if (*GAIN_DEFS[i].ptr != stored_v[i]) return true;
-  return false;
+    if (fabsf(*GAIN_DEFS[i].ptr - stored_v[i]) > (GAIN_DEFS[i].ptr == &eTrim ? 0.05f : 0.0f))
+      return true;
+  return fabsf(trimX - stored_trimX) > 0.05f || fabsf(trimY - stored_trimY) > 0.05f;
 }
 
 // Restore saved gains at startup.  Anything missing, corrupt, or outside
@@ -412,13 +421,17 @@ are busy. Returns to zero on stop, disarm or arm.</p>
 Heading is dead-reckoned from the gyro — no compass — so it drifts over
 minutes and resets each time the cube stands up.</p>
 <div style="display:flex;justify-content:space-between;align-items:baseline">
-<span class="k">Learned trim</span><b class="m" id="tv">—</b></div>
+<span class="k">Balance point (trim)</span><b class="m" id="tv">—</b></div>
 <p class="note" id="tnote">Auto-trim is off.</p>
 <div class="ab">
 <button class="b" id="ttog">Auto-trim</button>
-<button class="b" id="treset">Reset trim</button></div>
-<p class="note">Saved with the gains, so it applies from the next boot.
-Reset it after changing the cube's hardware, then save again.</p>
+<button class="b" id="treset">Reset trim</button>
+<button class="b w1" id="tcap">Set balance point here</button></div>
+<p class="note" id="tcn"></p>
+<p class="note">Let the cube stand until it is quiet, then set the balance point:
+it will take over from there next time instead of from the calibrated pose.
+Saved with the gains (press Save in Gains). Reset it after changing the
+cube's hardware.</p>
 </div></details>
 
 <details><summary>Calibration</summary><div class="bd">
@@ -478,14 +491,15 @@ function poll(){
   $('dot').setAttribute('cx',100+rad(d.robot_angleX));
   $('dot').setAttribute('cy',100-rad(d.robot_angleY));
   // Green inside the vertex capture window, amber once it is drifting.
-  var q=Math.abs(d.robot_angleX)<0.4&&Math.abs(d.robot_angleY)<0.4;
+  // Relative to the balance point (trim): that is where it takes over.
+  var q=Math.abs(d.robot_angleX-d.trimX)<0.4&&Math.abs(d.robot_angleY-d.trimY)<0.4;
   $('dot').setAttribute('class',q?'q':'');  // SVG: className is read-only
   // Edge pendulum. Both visualizers are updated unconditionally - it is two
   // attribute writes - and CSS shows whichever one matches the pose.
   $('ebody').setAttribute('transform',
     'rotate('+tilt(d.robot_angleX).toFixed(2)+',100,170)');
   $('ecube').setAttribute('class',
-    'cube'+(Math.abs(d.robot_angleX)<0.4?' q':''));
+    'cube'+(Math.abs(d.robot_angleX-d.trimE)<0.3?' q':''));
   // Edge mode only when the firmware is actually in it; anything else keeps
   // the general-purpose attitude target.
   document.body.classList.toggle('e',d.vertical_edge&&!d.vertical_vertex);
@@ -530,7 +544,13 @@ function poll(){
   $('cr').textContent=d.cal_result||'';
   $('raw').textContent='raw  X '+d.acX+'   Y '+d.acY+'   Z '+d.acZ;
   // Learned balance-point trim. Only meaningful once tK is non-zero.
-  $('tv').textContent=d.trimX.toFixed(2)+'° / '+d.trimY.toFixed(2)+'°';
+  $('tv').textContent=d.trimX.toFixed(2)+'° / '+d.trimY.toFixed(2)+'° · edge '
+                      +d.trimE.toFixed(2)+'°';
+  // Only a settled cube knows its balance point; say what it is waiting for.
+  $('tcap').disabled=!d.settled;
+  $('tcn').textContent=d.settled?'Settled — ready to set the balance point.'
+   :(bal?'Waiting for the cube to settle (quiet wheels, about 5 s)…'
+        :'Available while the cube is balancing and settled.');
   var tk=G&&G.tK?G.tK.v:0;
   $('ttog').textContent='Auto-trim: '+(tk!=0?'ON':'OFF');
   $('tnote').textContent=tk!=0
@@ -847,6 +867,8 @@ heading('h180',180,'turn 180°');
 $('hfree').onclick=function(){$('yaw').value=0;$('yv').textContent='0 °/s';
  dragging=false;send('yaw_free',this,'heading released');};
 bind('treset','trim_reset');
+bind('tcap','trim_capture','Use the current settled pose as the balance point?',
+     'set balance point');
 // Auto-trim toggle: writes tK through the normal gains endpoint so the
 // firmware's range check still applies.  OFF stashes the current rate and
 // ON restores it, so a rate tuned in the Gains panel round-trips.
@@ -948,6 +970,8 @@ void handleApiState() {
       // Learned balance-point offset and the active yaw command.
       "\"trimX\":%.3f,"
       "\"trimY\":%.3f,"
+      "\"trimE\":%.3f,"            // edge balance point
+      "\"settled\":%s,"            // ready for "set balance point here"
       "\"yaw_rate\":%.1f,"
       // Dead-reckoned heading and whether the outer loop is driving it.
       "\"robot_yaw\":%.1f,"
@@ -969,7 +993,8 @@ void handleApiState() {
     vertex_calibrated ? "true" : "false",
     armed             ? "true" : "false",
     batt_voltage, battStateName(), batt_comp,
-    AcX, AcY, AcZ, trimX, trimY, yaw_rate_cmd,
+    AcX, AcY, AcZ, trimX, trimY, eTrim,
+    settledForTrim() ? "true" : "false", yaw_rate_cmd,
     robot_yaw, yaw_hold ? "true" : "false",
     wheel_wind, yaw_guard ? "true" : "false",
     gainsUnsaved() ? "true" : "false",
@@ -1136,6 +1161,18 @@ void handleApiCommand() {
   // reason the calibration commands do.
   else if (cmd == "gains_save")  { req = WEB_CMD_GAINS_SAVE;  needs_idle = true; }
   else if (cmd == "trim_reset")  req = WEB_CMD_TRIM_RESET;
+  else if (cmd == "trim_capture") {
+    // Only a cube that is balancing and settled knows its balance point.
+    if (!settledForTrim()) {
+      webServer.send(409, "application/json",
+                     balancingActive()
+                       ? "{\"ok\":false,\"error\":\"not settled yet - wait until"
+                         " the wheels are quiet\"}"
+                       : "{\"ok\":false,\"error\":\"only while balancing\"}");
+      return;
+    }
+    req = WEB_CMD_TRIM_CAPTURE;
+  }
   else if (cmd == "yaw") {
     // Yaw is a setpoint, not an action: record the requested rate and
     // return.  The control loop clamps and applies it on its next pass;

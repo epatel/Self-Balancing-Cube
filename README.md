@@ -164,8 +164,14 @@ voltage, status and a live trace of the control loop. From it you can:
   commanded (about 7 °/s short at 20 °/s), because the term that unwinds the wheels resists
   the spin; setting `zK3s` below 1 (e.g. 0.25) weakens that term while spinning, so the
   cube follows the command more closely but the guard ends a long spin sooner.
-- **Auto-trim** — let the cube learn its true balance point from sustained wheel speed
-  (`tK`, off by default). The learned trim is saved with the gains.
+- **Set balance point here** — the calibrated pose is captured by hand and is usually
+  half a degree or more from where the cube really balances; taking over from there makes
+  it wind its wheels up hard and wobble for half a minute. Let the cube stand until it is
+  quiet, press this once, then Save: from then on it takes over from the true balance
+  point. Vertex and edge each keep their own. Do it once per cube, and again after
+  changing its hardware or recalibrating.
+- **Auto-trim** — let the cube learn its balance point continuously from sustained wheel
+  speed instead (`tK`, off by default). The trim is saved with the gains.
 
 Bluetooth has been removed: it was 40% of the firmware image, the web interface replaced
 everything it did, and Espressif rates a simultaneous SoftAP + Bluetooth Classic as

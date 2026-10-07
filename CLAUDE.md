@@ -119,6 +119,13 @@ Runs every `loop_time` (15 ms), using the measured `dt` clamped to 5–45 ms:
 - **Motor numbering** is set by the control geometry: motor 3 alone balances the edge;
   swapping motors 1 and 2 reverses the vertex Y axis. Cube1: 1 = D4, 2 = D5, 3 = D15 pin
   groups (upstream 1 = D4, 2 = D15, 3 = D5). Cube2: the same (motors_test OK 2026-10-06; balance tests pending).
+- **Balance point (trim) vs calibrated pose.** The hand-captured pose is typically
+  0.5–1° off the true balance point; taking over there wound the wheels to ±280 with a
+  35 s wobbly recovery (traces 2026-10-07). `trim_capture` ("Set balance point here")
+  stores the settled ~1 s average tilt as the trim, bumplessly (the K4 integral is moved
+  with it), only when `settledForTrim()`. The take-over windows in `angle_calc()` are
+  centred on the trim. Vertex uses `trimX/trimY` (record fields); the edge has its own
+  `eTrim` (a gain) — they used to share `trimX`.
 - **Yaw shares the motors with balance**: `pwm_Z` is added to every motor, so
   `XYZ_to_threeWay()` limits it to the headroom left after the tilt axes and speed
   feedback, capped at `YAW_PWM_MAX`. Rate commands are ramped (`YAW_ACCEL`) toward
@@ -159,7 +166,8 @@ current pose.
 
 HTTP: `GET /api/state`, `GET /api/trace?since=N`, `GET|POST /api/gains`,
 `POST /api/command` with `cmd=` one of `stop`, `disarm`, `arm`, `cal_start`, `cal_capture`,
-`cal_save`, `gains_save`, `trim_reset`, `yaw` (`rate=`), `turn` (`deg=`), `yaw_free`.
+`cal_save`, `gains_save`, `trim_reset`, `trim_capture`, `yaw` (`rate=`), `turn` (`deg=`),
+`yaw_free`.
 
 ## Docs
 
