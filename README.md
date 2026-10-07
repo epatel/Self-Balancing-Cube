@@ -68,6 +68,14 @@ Full resolution: [`schematic.pdf`](schematic.pdf)
 
 The red connections in the schematic are the encoder lines. They **must be connected**.
 
+### Hand-soldering on perfboard
+
+To build the electronics on a 5×7 cm perfboard instead of a PCB, see
+[cube-soldering-tool](https://github.com/epatel/cube-soldering-tool): a local planner where
+you place the parts, lay solder paths and jumper wires as seen from below, and it checks
+the result against this schematic's netlist (every net joined, nothing shorted). It also
+prints enlarged bench sheets and wiring lists.
+
 ## Building and flashing
 
 ### Balancing firmware (PlatformIO)
